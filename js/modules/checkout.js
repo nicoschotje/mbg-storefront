@@ -278,9 +278,17 @@ async function placeOrder(host) {
       order_number: data.order_number, total, items_count: items.length, payment_method: _selectedPay
     });
 
+    // Show success screen immediately with a "pending" verification badge
     showSuccessScreen(data.order_number, items, total);
     clearCart();
     closeCheckoutScreen();
+
+    // Verify receipt in background — badge updates when done
+    if (needsReceipt && receiptInput?.files?.[0]) {
+      verifyReceipt(data.order_number, _selectedPay, receiptInput.files[0])
+        .then(result => updateVerificationBadge(data.order_number, result))
+        .catch(() => updateVerificationBadge(data.order_number, { status: 'manual_review' }));
+    }
   } catch(e) {
     console.error('[checkout] placeOrder error', e);
     showToast(e.message || 'Order failed.');
@@ -291,16 +299,13 @@ async function placeOrder(host) {
 }
 
 async function uploadReceipt(file) {
-  // Mirror the old storefront: POST to /upload-receipt edge function (multipart)
+  // Kept for backward-compat; actual verification now done by verifyReceipt() below.
   const fd = new FormData();
   fd.append('file', file);
   try {
     const resp = await fetch(`${EDGE_URL}/upload-receipt`, {
       method: 'POST',
-      headers: {
-        'apikey': SUPABASE_ANON,
-        'Authorization': `Bearer ${SUPABASE_ANON}`
-      },
+      headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${SUPABASE_ANON}` },
       body: fd
     });
     if (!resp.ok) throw new Error('Upload failed');
@@ -311,6 +316,42 @@ async function uploadReceipt(file) {
     return null;
   }
 }
+// ── Payment verification helpers ────────────────────────────────────────────────
+// Calls the verify-payment Supabase edge function with the screenshot file.
+async function verifyReceipt(orderRef, paymentMethod, file) {
+  const fd = new FormData();
+  fd.append('order_ref', orderRef);
+  fd.append('payment_method', paymentMethod);
+  fd.append('file', file);
+  try {
+    const res = await fetch(`${EDGE_URL}/verify-payment`, {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${SUPABASE_ANON}` },
+      body: fd
+    });
+    return res.ok ? res.json() : { status: 'manual_review' };
+  } catch(_) {
+    return { status: 'manual_review' };
+  }
+}
+
+// Updates the verification badge on the success screen once async verify completes.
+function updateVerificationBadge(orderNum, result) {
+  const badge = document.getElementById(`verify-badge-${CSS.escape(orderNum)}`);
+  if (!badge) return;
+  const { status, mismatch_reason } = result || {};
+  if (status === 'verified') {
+    badge.className = 'verify-badge verified';
+    badge.innerHTML = '&#10003; Payment verified';
+  } else if (status === 'mismatch') {
+    badge.className = 'verify-badge mismatch';
+    badge.innerHTML = `&#9888; Amount mismatch &mdash; ${mismatch_reason || 'please contact us'}`;
+  } else {
+    badge.className = 'verify-badge review';
+    badge.innerHTML = '&#8987; Receipt sent for manual review';
+  }
+}
+
 
 // ── Success screen ──────────────────────────────────────────
 export function showSuccessScreen(orderNum, items, total) {
@@ -324,11 +365,12 @@ export function showSuccessScreen(orderNum, items, total) {
   const summary = items.map(i => `${i.product.emoji || '🌿'} ${i.product.name} ×${i.qty}`).join(', ');
   host.innerHTML = `
     <div class="success-card">
-      <div class="success-icon">✓</div>
+      <div class="success-icon">&#10003;</div>
       <h2>Order placed</h2>
       <p class="success-num">#${esc(orderNum || '—')}</p>
       <div class="success-items">${esc(summary)}</div>
       <div class="success-total">${esc(formatPrice(total))}</div>
+      <div id="verify-badge-${esc(orderNum)}" class="verify-badge pending">&#8987; Verifying your receipt&hellip;</div>
       <p class="success-note">We&rsquo;ll prepare your order and message you when it&rsquo;s on the way. Salamat!</p>
       <div class="success-actions">
         <button id="successKeepShopping" type="button" class="btn-ghost">Keep shopping</button>

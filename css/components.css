@@ -994,3 +994,23 @@ body.modal-open .appFooter {
   box-shadow: 0 0 16px 0 var(--pill-glow);
 }
 
+
+/* ── PAYMENT VERIFICATION BADGE (success screen) ──────── */
+.verify-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  margin: 0.6rem auto 0;
+  max-width: 280px;
+  letter-spacing: 0.01em;
+  transition: background 0.3s, color 0.3s;
+}
+.verify-badge.pending  { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
+.verify-badge.verified { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+.verify-badge.mismatch { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+.verify-badge.review   { background: #ede9fe; color: #5b21b6; border: 1px solid #c4b5fd; }
