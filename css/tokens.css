@@ -1,0 +1,76 @@
+/* MBG Storefront v2 — Design Tokens */
+
+/* ── @property registry — typed custom properties enable smooth tweens ──
+   on values CSS cannot tween natively (shadows, colors, lengths).
+   These MUST come before any rule that uses them.
+   ─────────────────────────────────────────────────────────────────────── */
+@property --lift-y       { syntax: '<length>';     initial-value: 0px;   inherits: false; }
+@property --shadow-blur  { syntax: '<length>';     initial-value: 12px;  inherits: false; }
+@property --shadow-y     { syntax: '<length>';     initial-value: 4px;   inherits: false; }
+@property --shadow-alpha { syntax: '<number>';     initial-value: 0.18;  inherits: false; }
+@property --tilt-x       { syntax: '<angle>';      initial-value: 0deg;  inherits: false; }
+@property --tilt-y       { syntax: '<angle>';      initial-value: 0deg;  inherits: false; }
+@property --pill-glow    { syntax: '<color>';      initial-value: rgba(200,160,56,0); inherits: false; }
+@property --gold-shift   { syntax: '<percentage>'; initial-value: 0%;    inherits: false; }
+
+:root {
+  --bg:           #E8DFC8;
+  --bg-alt:       #DDD4BB;
+  --card:         #F6F0E0;
+  --card-hover:   #F0E8D0;
+  --green:        #2A4530;
+  --green-dark:   #192D1E;
+  --green-mid:    #375C3B;
+  --green-muted:  #587A5A;
+  --green-leaf:   #b8d490;
+  --amber:        #8A6528;
+  --amber-light:  #B08540;
+  --amber-pale:   #DECB98;
+  --gold:         #C8A038;
+  --cream:        #F8F2E4;
+  --white:        #FDFAF0;
+  --text:         #0E0C08;
+  --text-muted:   #524B3E;
+  --text-light:   #8A8070;
+  --border:       #C8B898;
+  --border-light: #D8CDB0;
+
+  --shadow-sm:    0 2px 8px rgba(20,16,8,0.10);
+  --shadow-md:    0 6px 24px rgba(20,16,8,0.14);
+  --shadow-lg:    0 12px 48px rgba(20,16,8,0.20);
+  --shadow-xl:    0 24px 80px rgba(20,16,8,0.30);
+
+  --radius-sm:    10px;
+  --radius-md:    16px;
+  --radius-lg:    22px;
+  --radius-xl:    30px;
+
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-body:    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  --success:      #2A6F3D;
+  --danger:       #B0341E;
+  --warning:      #8A6528;
+
+  --max-w:        640px;
+}
+
+* , *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+  font-family: var(--font-body);
+  background-color: var(--bg);
+  color: var(--text);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+  overflow-x: hidden;
+  min-height: 100dvh;
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 400;
+}
+img { max-width: 100%; display: block; }
+button { font-family: inherit; cursor: pointer; }
+input, select, textarea { font-family: inherit; font-size: 16px; }
+a { color: var(--green-dark); text-decoration: none; }
+

@@ -1,0 +1,109 @@
+/* MBG Storefront v2 — Banners + Announcements + Store Settings */
+import { sb } from '../core/supabase.js';
+import { esc } from '../core/utils.js';
+import { FALLBACK_HERO, BRAND_NAME } from '../core/config.js';
+
+let _settings = null;
+
+export function getStoreSettings() { return _settings; }
+
+export async function loadStoreSettings() {
+  try {
+    const { data } = await sb().from('store_settings').select('*').limit(1).single();
+    _settings = data || null;
+  } catch(e) { console.warn('[banners] store_settings load failed', e); _settings = null; }
+  return _settings;
+}
+
+export async function loadBanners() {
+  try {
+    const { data } = await sb().from('banners')
+      .select('*').eq('is_active', true).order('sort_order');
+    return data || [];
+  } catch(_) { return []; }
+}
+
+export async function loadAnnouncements() {
+  try {
+    const { data } = await sb().from('announcements')
+      .select('*').eq('is_active', true).order('created_at', { ascending: false });
+    const now = Date.now();
+    return (data || []).filter(a => !a.expires_at || new Date(a.expires_at).getTime() > now);
+  } catch(_) { return []; }
+}
+
+// ── Render hero ─────────────────────────────────────────────
+// Field-name compatibility: dashboard-v2 writes new column names
+// (image_url, subtitle, button_text, link_url). Older rows still use the
+// legacy names (media_url, description, cta_text, cta_link). We read both
+// so neither side breaks during the transition.
+export function renderHero(targetEl, banners) {
+  if (!targetEl) return;
+  const banner = banners?.[0];
+  const url   = banner?.image_url || banner?.media_url || _settings?.topbar_banner_url || FALLBACK_HERO;
+  const title = banner?.title    || _settings?.store_name || BRAND_NAME;
+  const desc  = banner?.subtitle || banner?.description || 'Hand-picked. Discreetly delivered. Made for the moment.';
+  const cta   = banner?.button_text || banner?.cta_text  || 'Shop the menu';
+
+  // Style the hero word italic — split last word
+  const words = title.split(' ');
+  const last  = words.pop();
+  const head  = words.join(' ');
+
+  targetEl.innerHTML = `
+    <img class="hero-img" src="${esc(url)}" alt="" loading="eager"/>
+    <div class="hero-overlay"></div>
+    <div class="hero-content">
+      <span class="hero-eyebrow">Est. Manila · Curated Daily</span>
+      <h1 class="hero-title">${esc(head)} <em>${esc(last)}</em></h1>
+      <p class="hero-sub">${esc(desc)}</p>
+      <div class="hero-actions">
+        <button class="hero-cta" type="button" data-scroll-to="catNav">${esc(cta)} →</button>
+        <span class="hero-scroll">Scroll
+          <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </span>
+      </div>
+    </div>`;
+  targetEl.querySelector('.hero-cta')?.addEventListener('click', () => {
+    document.getElementById('catNavWrap')?.scrollIntoView({ behavior: 'smooth' });
+  });
+}
+
+// ── Render announcement bar ─────────────────────────────────
+export function renderAnnouncements(targetEl, anns) {
+  if (!targetEl) return;
+  if (!anns || !anns.length) {
+    targetEl.style.display = 'none';
+    targetEl.innerHTML = '';
+    return;
+  }
+  targetEl.style.display = '';
+  // Dashboard-v2 writes `message` (the single line of text). Older rows
+  // still have `title`/`body`. Prefer `message` and fall back gracefully.
+  const text = anns.map(a => {
+    if (a.message) return a.message;
+    const t = a.title ? `${a.title}` : '';
+    const b = a.body  ? ` — ${a.body}` : '';
+    return `${t}${b}`.trim();
+  }).filter(Boolean).join('   ✦   ');
+  if (!text) { targetEl.style.display = 'none'; targetEl.innerHTML = ''; return; }
+  targetEl.innerHTML = `<div class="announce-marquee">${esc(text)}   ✦   ${esc(text)}</div>`;
+}
+
+// ── Render category banner block ────────────────────────────
+import { FALLBACK_CATEGORY_BANNERS } from '../core/config.js';
+export function renderCategoryBanner(category, banner) {
+  const url = banner?.image_url || banner?.media_url || FALLBACK_CATEGORY_BANNERS[category.name] || FALLBACK_CATEGORY_BANNERS['Flower'];
+  const words = String(category.name || 'Selection').split(' ');
+  const last = words.pop();
+  const head = words.join(' ');
+  return `<div class="cat-banner">
+    <img src="${esc(url)}" alt="" loading="lazy"/>
+    <div class="cat-banner-overlay">
+      <div class="cat-banner-eyebrow">Collection · ${esc(category.emoji||'')}</div>
+      <h2 class="cat-banner-title">${esc(head)}${head?' ':''}<em>${esc(last)}</em></h2>
+      <div class="cat-banner-sub">${esc(category.description || 'Hand-picked, in-stock now.')}</div>
+    </div>
+  </div>`;
+}
+

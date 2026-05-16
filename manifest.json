@@ -1,0 +1,27 @@
+{
+  "name": "Mr. Beanie's Greenies",
+  "short_name": "MBG",
+  "description": "Premium artisan goods, delivered.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#192D1E",
+  "background_color": "#E8DFC8",
+  "lang": "en-PH",
+  "icons": [
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='34' fill='%23192D1E'/><text x='96' y='124' font-family='Georgia,serif' font-size='110' font-weight='900' text-anchor='middle' fill='%23C8A038'>M</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='90' fill='%23192D1E'/><text x='256' y='332' font-family='Georgia,serif' font-size='300' font-weight='900' text-anchor='middle' fill='%23C8A038'>M</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
+

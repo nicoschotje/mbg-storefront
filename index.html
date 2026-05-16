@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en-PH">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#192D1E" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="MBG" />
+  <meta name="description" content="Mr. Beanie's Greenies — premium artisan goods, delivered." />
+  <meta name="format-detection" content="telephone=no" />
+
+  <title>Mr. Beanie's Greenies</title>
+
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23192D1E'/><text x='32' y='42' font-family='Georgia,serif' font-size='34' font-weight='900' text-anchor='middle' fill='%23C8A038'>M</text></svg>" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,400;1,600;1,700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="./css/tokens.css" />
+  <link rel="stylesheet" href="./css/layout.css" />
+  <link rel="stylesheet" href="./css/components.css" />
+</head>
+<body>
+
+  <div class="grain-overlay" aria-hidden="true"></div>
+
+  <!-- ── LOGIN GATE ─────────────────────────────── -->
+  <section id="loginScreen" class="login-screen">
+    <div class="login-card">
+      <div class="login-logo">
+        <div class="logo-icon">M</div>
+        <div class="logo-text">
+          <div class="top">Mr. Beanie's Greenies</div>
+          <div class="sub">Premium · Manila</div>
+        </div>
+      </div>
+      <h1>Welcome <em>back</em>.</h1>
+      <p class="login-sub">Sign in with your phone number and PIN to start shopping.</p>
+
+      <div id="loginError" class="login-error" role="alert"></div>
+
+      <label class="field">
+        <span>Mobile number</span>
+        <input id="loginPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+63 9XX XXX XXXX" />
+      </label>
+      <label class="field">
+        <span>PIN</span>
+        <input id="loginPin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="8" placeholder="••••" />
+      </label>
+
+      <button id="loginSubmitBtn" class="btn-primary" type="button">Sign in</button>
+
+      <div class="login-divider">or</div>
+
+      <button id="biometricLoginBtn" class="bio-btn" type="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 12c2 0 4 1.79 4 4v2"/><circle cx="12" cy="8" r="3"/><path d="M5 21c0-2.5 1-5 3.5-7"/></svg>
+        Use Face ID / Fingerprint
+      </button>
+    </div>
+  </section>
+
+  <!-- ── HEADER ────────────────────────────────── -->
+  <header class="header" id="appHeader" hidden>
+    <div class="header-inner">
+      <div class="logo-block" id="logoBlock">
+        <div class="logo-icon">M</div>
+        <div class="logo-text">
+          <div class="top" id="storeName">Mr. Beanie's Greenies</div>
+          <div class="sub">Premium · Manila</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <span id="tierBadge" style="display:none"></span>
+        <button class="cart-btn" id="cartBtnHeader" aria-label="Open cart">
+          <svg viewBox="0 0 24 24"><path d="M6 6h15l-1.5 9h-12L5 3H2"/><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/></svg>
+          <span>Cart</span>
+          <span class="cart-count" id="cartCountHeader">0</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── ANNOUNCEMENT BAR ─────────────────────── -->
+  <div class="announce" id="announceBar" hidden></div>
+
+  <!-- ── HERO ──────────────────────────────────── -->
+  <section class="hero" id="heroSection" hidden></section>
+
+  <!-- ── CATEGORY NAV ─────────────────────────── -->
+  <nav class="cat-nav-wrap" id="catNavWrap" hidden>
+    <div class="cat-nav" id="catNav" role="tablist"></div>
+  </nav>
+
+  <!-- ── PRODUCT SECTIONS ─────────────────────── -->
+  <main class="products-wrap" id="productsWrap" hidden></main>
+
+  <!-- ── FOOTER LINKS ─────────────────────────── -->
+  <footer class="footer" id="appFooter" hidden style="text-align:center;padding:1.5rem 1rem 4rem;color:var(--text-light);font-size:0.78rem;line-height:1.6;">
+    <div style="margin-bottom: 0.5rem;">
+      <a href="#" id="openTrackingLink">My Orders</a>
+      &nbsp;·&nbsp;
+      <a href="#" id="logoutLink">Sign out</a>
+    </div>
+    <div style="opacity:0.7;">© Mr. Beanie's Greenies. All rights reserved.</div>
+  </footer>
+
+  <!-- ── CART DRAWER ──────────────────────────── -->
+  <aside class="cart-drawer" id="cartDrawer" aria-label="Cart"></aside>
+
+  <!-- Toast host inserted dynamically -->
+
+  <!-- ── APP SCRIPT ──────────────────────────── -->
+  <script type="module">
+    import { sb } from './js/core/supabase.js';
+    import { showToast, installPopstateHandler } from './js/core/utils.js';
+    import { bindLoginScreen, tryRestoreSession, getSession, getAuthPhone, onAuthChange, logout } from './js/core/auth.js';
+    import { loadStoreSettings, loadBanners, loadAnnouncements, renderHero, renderAnnouncements } from './js/modules/banners.js';
+    import { loadCategories, loadProducts, renderCategoryNav, renderProductSections, getCategories } from './js/modules/products.js';
+    import { loadDiscountRules, bindCartTriggers, getCartCount } from './js/modules/cart.js';
+    import { openCheckoutScreen } from './js/modules/checkout.js';
+    import { openTrackingScreen } from './js/modules/tracking.js';
+    import { loadTier, renderTierBadge } from './js/modules/tiers.js';
+    import { SW_PATH } from './js/core/config.js';
+
+    // ── Boot sequence ─────────────────────────
+    installPopstateHandler();
+
+    function showApp() {
+      document.getElementById('loginScreen').style.display = 'none';
+      ['appHeader','announceBar','heroSection','catNavWrap','productsWrap','appFooter'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.hidden = false;
+      });
+    }
+
+    async function loadStorefront() {
+      // Boot data in parallel
+      const [_, banners, anns] = await Promise.all([
+        loadStoreSettings(),
+        loadBanners(),
+        loadAnnouncements()
+      ]);
+
+      // Render hero + announcement bar
+      renderHero(document.getElementById('heroSection'), banners);
+      renderAnnouncements(document.getElementById('announceBar'), anns);
+
+      // Categories + products + discount rules
+      await Promise.all([loadCategories(), loadProducts(), loadDiscountRules()]);
+
+      const catNav = document.getElementById('catNav');
+      const wrap   = document.getElementById('productsWrap');
+
+      renderCategoryNav(catNav, () => renderProductSections(wrap, banners));
+      renderProductSections(wrap, banners);
+
+      // Cart wiring
+      bindCartTriggers({
+        openBtnSel: '#cartBtnHeader',
+        drawerId: 'cartDrawer',
+        countEl: document.getElementById('cartCountHeader')
+      });
+
+      // Tier badge
+      await loadTier();
+      renderTierBadge(document.getElementById('tierBadge'));
+
+      // Footer hooks
+      document.getElementById('openTrackingLink').addEventListener('click', (e) => {
+        e.preventDefault(); openTrackingScreen(getAuthPhone() || '');
+      });
+      document.getElementById('logoutLink').addEventListener('click', async (e) => {
+        e.preventDefault();
+        await logout();
+        location.reload();
+      });
+
+      // Subscribe live updates (products, banners, announcements)
+      try {
+        sb().channel('mbg-storefront-rt')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, async () => {
+            await loadProducts();
+            renderProductSections(wrap, banners);
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'banners' }, async () => {
+            const b = await loadBanners();
+            renderHero(document.getElementById('heroSection'), b);
+            renderProductSections(wrap, b);
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements' }, async () => {
+            const a = await loadAnnouncements();
+            renderAnnouncements(document.getElementById('announceBar'), a);
+          })
+          .subscribe();
+      } catch(e) { console.warn('[boot] realtime subscribe failed', e); }
+    }
+
+    // ── Login wiring ─────────────────────────
+    bindLoginScreen({
+      phoneInputId: 'loginPhone',
+      pinInputId:   'loginPin',
+      submitBtnId:  'loginSubmitBtn',
+      biometricBtnId: 'biometricLoginBtn',
+      errorElId:    'loginError',
+      onLoggedIn: async () => {
+        showApp();
+        await loadStorefront();
+      }
+    });
+
+    // Try to silently log back in via remember-token
+    (async () => {
+      const sess = await tryRestoreSession();
+      if (sess) {
+        showApp();
+        await loadStorefront();
+      }
+    })();
+
+    // Re-render tier badge on auth state change
+    onAuthChange(() => {
+      renderTierBadge(document.getElementById('tierBadge'));
+    });
+
+    // Network status banner
+    function showOfflineBannerIfNeeded() {
+      if (!navigator.onLine) showToast("You're offline — viewing cached menu");
+    }
+    window.addEventListener('online',  () => showToast('Back online'));
+    window.addEventListener('offline', showOfflineBannerIfNeeded);
+    showOfflineBannerIfNeeded();
+
+    // ── Hero parallax — slow vertical drift while scrolling the homepage.
+    // Uses requestAnimationFrame coalescing so it's cheap on mobile.
+    (function wireHeroParallax() {
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      let pending = false;
+      const onScroll = () => {
+        if (pending) return;
+        pending = true;
+        requestAnimationFrame(() => {
+          const y = window.scrollY;
+          const heroImg = document.querySelector('.hero-img');
+          if (heroImg && y < 600) {
+            heroImg.style.setProperty('--hero-y', (y * 0.35).toFixed(1) + 'px');
+          }
+          pending = false;
+        });
+      };
+      window.addEventListener('scroll', onScroll, { passive: true });
+    })();
+
+    // ── Service worker ──────────────────────
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register(SW_PATH).catch(err => {
+          console.warn('[sw] registration failed', err);
+        });
+      });
+    }
+  </script>
+</body>
+</html>
