@@ -7,9 +7,9 @@
  *   revoke_remember_tokens, logout_customer_session
  */
 
-import { sb, logActivity } from './supabase.js';
-import { showToast, esc, normalisePhone, isValidPHPhone, bufferToBase64url, base64urlToBuffer, isInAppBrowser } from './utils.js';
-import { LOGIN_FAIL_LIMIT, LOGIN_LOCKOUT_MS, PIN_MIN_LENGTH, PIN_MAX_LENGTH } from './config.js';
+import { sb, logActivity } from './supabase.js?v=20260517-loginfix';
+import { showToast, esc, normalisePhone, isValidPHPhone, bufferToBase64url, base64urlToBuffer, isInAppBrowser } from './utils.js?v=20260517-loginfix';
+import { LOGIN_FAIL_LIMIT, LOGIN_LOCKOUT_MS, PIN_MIN_LENGTH, PIN_MAX_LENGTH } from './config.js?v=20260517-loginfix';
 
 let _session = null;
 let _phone = null;
@@ -360,4 +360,3 @@ export async function logout() {
   try { localStorage.removeItem('mg_remember_token'); } catch(_) {}
   emit();
 }
-
