@@ -153,16 +153,16 @@
 
   <!-- ── APP SCRIPT ──────────────────────────── -->
   <script type="module">
-    import { sb } from './js/core/supabase.js';
-    import { showToast, installPopstateHandler } from './js/core/utils.js';
-    import { bindLoginScreen, tryRestoreSession, getSession, getAuthPhone, onAuthChange, logout } from './js/core/auth.js';
-    import { loadStoreSettings, loadBanners, loadAnnouncements, renderHero, renderAnnouncements } from './js/modules/banners.js';
-    import { loadCategories, loadProducts, renderCategoryNav, renderProductSections, renderFeaturedSection, setSearchQuery, getCategories, getProducts } from './js/modules/products.js';
-    import { loadDiscountRules, bindCartTriggers, getCartCount } from './js/modules/cart.js';
-    import { openCheckoutScreen } from './js/modules/checkout.js';
-    import { openTrackingScreen } from './js/modules/tracking.js';
-    import { loadTier, renderTierBadge } from './js/modules/tiers.js';
-    import { SW_PATH } from './js/core/config.js';
+    import { sb } from './js/core/supabase.js?v=20260517-loginfix';
+    import { showToast, installPopstateHandler } from './js/core/utils.js?v=20260517-loginfix';
+    import { bindLoginScreen, tryRestoreSession, getSession, getAuthPhone, onAuthChange, logout } from './js/core/auth.js?v=20260517-loginfix';
+    import { loadStoreSettings, loadBanners, loadAnnouncements, renderHero, renderAnnouncements } from './js/modules/banners.js?v=20260517-loginfix';
+    import { loadCategories, loadProducts, renderCategoryNav, renderProductSections, renderFeaturedSection, setSearchQuery, getCategories, getProducts } from './js/modules/products.js?v=20260517-loginfix';
+    import { loadDiscountRules, bindCartTriggers, getCartCount } from './js/modules/cart.js?v=20260517-loginfix';
+    import { openCheckoutScreen } from './js/modules/checkout.js?v=20260517-loginfix';
+    import { openTrackingScreen } from './js/modules/tracking.js?v=20260517-loginfix';
+    import { loadTier, renderTierBadge } from './js/modules/tiers.js?v=20260517-loginfix';
+    import { SW_PATH } from './js/core/config.js?v=20260517-loginfix';
 
     // ── Boot sequence ─────────────────────────
     installPopstateHandler();
