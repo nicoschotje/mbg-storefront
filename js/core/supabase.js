@@ -1,6 +1,6 @@
 /* MBG Storefront v2 — Supabase client */
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import { SUPABASE_URL, SUPABASE_ANON } from './config.js';
+import { SUPABASE_URL, SUPABASE_ANON } from './config.js?v=20260517-loginfix';
 
 let _sb = null;
 
@@ -22,4 +22,3 @@ export function logActivity(action, details = {}) {
       .then(() => {}, () => {});
   } catch(_) {}
 }
-
