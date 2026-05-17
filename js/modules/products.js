@@ -10,9 +10,23 @@ import { openRestockModal } from './restock.js';
 let _products = [];
 let _categories = [];
 let _activeCat = 'All';
+let _searchQuery = '';
 
 export function getProducts() { return _products; }
 export function getCategories() { return _categories; }
+
+export function setSearchQuery(q) {
+  _searchQuery = (q || '').toLowerCase().trim();
+}
+export function getSearchQuery() { return _searchQuery; }
+
+function applySearch(list) {
+  if (!_searchQuery) return list;
+  return list.filter(p =>
+    (p.name || '').toLowerCase().includes(_searchQuery) ||
+    (p.description || '').toLowerCase().includes(_searchQuery)
+  );
+}
 
 export async function loadCategories() {
   try {
@@ -77,15 +91,18 @@ export function renderProductSections(targetEl, banners = []) {
   let html = '';
   const cats = _activeCat === 'All' ? _categories : _categories.filter(c => c.name === _activeCat);
   if (!cats.length) {
-    html += '<div class="category-section" data-cat="All"><div class="product-grid">' + _products.map(productCardHtml).join('') + '</div></div>';
+    html += '<div class="category-section" data-cat="All"><div class="product-grid">' + applySearch(_products).map(productCardHtml).join('') + '</div></div>';
   } else {
     cats.forEach(cat => {
-      const list = _products.filter(p => productMatchesCat(p, cat));
+      const list = applySearch(_products.filter(p => productMatchesCat(p, cat)));
       if (!list.length && _activeCat === 'All') return;
       const isWide = /dab|concentr/i.test(cat.name);
       const banner = banners.find(b => b.category_name === cat.name) || null;
       html += `<div class="category-section" data-cat="${esc(cat.name)}">${renderCategoryBanner(cat, banner)}<div class="product-grid${isWide?' product-grid-wide':''}">${list.map(p => productCardHtml(p, isWide)).join('') || '<div class="empty">Nothing in this collection yet.</div>'}</div></div>`;
     });
+  }
+  if (!html && _searchQuery) {
+    html = `<div class="empty">No products match “${esc(_searchQuery)}”.</div>`;
   }
   targetEl.innerHTML = html;
   targetEl.querySelectorAll('.product-card').forEach(card => {

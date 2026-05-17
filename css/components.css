@@ -1119,3 +1119,51 @@ body.modal-open .appFooter {
   color: var(--gold);
   margin-top: 0.25rem;
 }
+
+/* ── SEARCH BAR ───────────────────────────────── */
+.search-wrap {
+  padding: 0.5rem 1rem 0;
+}
+.search-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 0 0.75rem;
+  height: 44px;
+}
+.search-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--text-light);
+}
+.search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 16px; /* prevent iOS zoom */
+  font-family: inherit;
+  padding: 0;
+  min-width: 0;
+}
+.search-input::placeholder { color: var(--text-light); }
+.search-input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+.search-clear {
+  background: none;
+  border: none;
+  color: var(--text-light);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px;
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

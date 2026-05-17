@@ -113,6 +113,26 @@
     <div class="featured-scroll" id="featuredScroll"></div>
   </section>
 
+  <!-- ── SEARCH BAR ───────────────────────────── -->
+  <div class="search-wrap" id="searchWrap" hidden>
+    <div class="search-inner">
+      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      <input
+        id="searchInput"
+        class="search-input"
+        type="search"
+        inputmode="search"
+        enterkeyhint="search"
+        autocomplete="off"
+        placeholder="Search products…"
+        aria-label="Search products"
+      />
+      <button class="search-clear" id="searchClear" aria-label="Clear search" hidden>✕</button>
+    </div>
+  </div>
+
   <!-- ── PRODUCT SECTIONS ─────────────────────── -->
   <main class="products-wrap" id="productsWrap" hidden></main>
 
@@ -137,7 +157,7 @@
     import { showToast, installPopstateHandler } from './js/core/utils.js';
     import { bindLoginScreen, tryRestoreSession, getSession, getAuthPhone, onAuthChange, logout } from './js/core/auth.js';
     import { loadStoreSettings, loadBanners, loadAnnouncements, renderHero, renderAnnouncements } from './js/modules/banners.js';
-    import { loadCategories, loadProducts, renderCategoryNav, renderProductSections, renderFeaturedSection, getCategories, getProducts } from './js/modules/products.js';
+    import { loadCategories, loadProducts, renderCategoryNav, renderProductSections, renderFeaturedSection, setSearchQuery, getCategories, getProducts } from './js/modules/products.js';
     import { loadDiscountRules, bindCartTriggers, getCartCount } from './js/modules/cart.js';
     import { openCheckoutScreen } from './js/modules/checkout.js';
     import { openTrackingScreen } from './js/modules/tracking.js';
@@ -181,6 +201,29 @@
 
       renderCategoryNav(catNav, () => renderProductSections(wrap, banners));
       renderProductSections(wrap, banners);
+
+      // ── Search bar wiring ─────────────────────
+      const searchWrap  = document.getElementById('searchWrap');
+      const searchInput = document.getElementById('searchInput');
+      const searchClear = document.getElementById('searchClear');
+      if (searchWrap) searchWrap.hidden = false;
+      let searchTimer;
+      searchInput?.addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          const q = searchInput.value;
+          setSearchQuery(q);
+          searchClear.hidden = !q;
+          renderProductSections(wrap, banners);
+        }, 200); // debounce — fast enough, won't fire on every keystroke
+      });
+      searchClear?.addEventListener('click', () => {
+        searchInput.value = '';
+        setSearchQuery('');
+        searchClear.hidden = true;
+        renderProductSections(wrap, banners);
+        searchInput.focus();
+      });
 
       // Cart wiring
       bindCartTriggers({
