@@ -28,6 +28,18 @@
 
   <div class="grain-overlay" aria-hidden="true"></div>
 
+  <!-- ── STORE CLOSED SCREEN ──────────────────── -->
+  <section id="storeClosedScreen" class="store-closed-screen" hidden>
+    <div class="store-closed-card">
+      <div class="store-closed-icon">🌿</div>
+      <h1 class="store-closed-title">We're Closed</h1>
+      <p class="store-closed-msg" id="storeClosedMsg">
+        The store is currently closed. Please check back later.
+      </p>
+      <p class="store-closed-hours" id="storeClosedHours"></p>
+    </div>
+  </section>
+
   <!-- ── LOGIN GATE ─────────────────────────────── -->
   <section id="loginScreen" class="login-screen">
     <div class="login-card">
@@ -207,7 +219,12 @@
       errorElId:    'loginError',
       onLoggedIn: async () => {
         showApp();
-        await loadStorefront();
+        try {
+          await loadStorefront();
+        } catch (err) {
+          if (err?.message !== 'STORE_CLOSED') throw err;
+          // STORE_CLOSED is expected and handled — swallow silently
+        }
       }
     });
 
@@ -216,7 +233,12 @@
       const sess = await tryRestoreSession();
       if (sess) {
         showApp();
-        await loadStorefront();
+        try {
+          await loadStorefront();
+        } catch (err) {
+          if (err?.message !== 'STORE_CLOSED') throw err;
+          // STORE_CLOSED is expected and handled — swallow silently
+        }
       }
     })();
 

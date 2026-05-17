@@ -12,6 +12,24 @@ export async function loadStoreSettings() {
     const { data } = await sb().from('store_settings').select('*').limit(1).single();
     _settings = data || null;
   } catch(e) { console.warn('[banners] store_settings load failed', e); _settings = null; }
+
+  // ── Store open/closed gate ─────────────────────
+  const settings = _settings;
+  const isOpen = settings?.store_open !== false;          // defaults to open if column absent
+  const override = settings?.store_open_override;          // null | true | false
+  const effectivelyOpen = override !== null && override !== undefined ? override : isOpen;
+  if (!effectivelyOpen) {
+    const closedScreen = document.getElementById('storeClosedScreen');
+    const loginScreen  = document.getElementById('loginScreen');
+    const msgEl        = document.getElementById('storeClosedMsg');
+    const hoursEl      = document.getElementById('storeClosedHours');
+    if (msgEl && settings?.closed_message) msgEl.textContent = settings.closed_message;
+    if (hoursEl && settings?.store_hours)  hoursEl.textContent = `Hours: ${settings.store_hours}`;
+    if (loginScreen)  loginScreen.style.display = 'none';
+    if (closedScreen) closedScreen.hidden = false;
+    // Stop boot — throw so the caller's boot sequence halts gracefully
+    throw new Error('STORE_CLOSED');
+  }
   return _settings;
 }
 
