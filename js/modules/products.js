@@ -10,9 +10,23 @@ import { openRestockModal } from './restock.js';
 let _products = [];
 let _categories = [];
 let _activeCat = 'All';
+let _searchQuery = '';
 
 export function getProducts() { return _products; }
 export function getCategories() { return _categories; }
+
+export function setSearchQuery(q) {
+  _searchQuery = (q || '').toLowerCase().trim();
+}
+export function getSearchQuery() { return _searchQuery; }
+
+function applySearch(list) {
+  if (!_searchQuery) return list;
+  return list.filter(p =>
+    (p.name || '').toLowerCase().includes(_searchQuery) ||
+    (p.description || '').toLowerCase().includes(_searchQuery)
+  );
+}
 
 export async function loadCategories() {
   try {
@@ -77,15 +91,18 @@ export function renderProductSections(targetEl, banners = []) {
   let html = '';
   const cats = _activeCat === 'All' ? _categories : _categories.filter(c => c.name === _activeCat);
   if (!cats.length) {
-    html += '<div class="category-section" data-cat="All"><div class="product-grid">' + _products.map(productCardHtml).join('') + '</div></div>';
+    html += '<div class="category-section" data-cat="All"><div class="product-grid">' + applySearch(_products).map(productCardHtml).join('') + '</div></div>';
   } else {
     cats.forEach(cat => {
-      const list = _products.filter(p => productMatchesCat(p, cat));
+      const list = applySearch(_products.filter(p => productMatchesCat(p, cat)));
       if (!list.length && _activeCat === 'All') return;
       const isWide = /dab|concentr/i.test(cat.name);
       const banner = banners.find(b => b.category_name === cat.name) || null;
       html += `<div class="category-section" data-cat="${esc(cat.name)}">${renderCategoryBanner(cat, banner)}<div class="product-grid${isWide?' product-grid-wide':''}">${list.map(p => productCardHtml(p, isWide)).join('') || '<div class="empty">Nothing in this collection yet.</div>'}</div></div>`;
     });
+  }
+  if (!html && _searchQuery) {
+    html = `<div class="empty">No products match “${esc(_searchQuery)}”.</div>`;
   }
   targetEl.innerHTML = html;
   targetEl.querySelectorAll('.product-card').forEach(card => {
@@ -152,4 +169,34 @@ export function closeProductModal() {
   host.classList.remove('open');
   closeOverlay('productModal');
   setTimeout(() => { if (host && !host.classList.contains('open')) host.innerHTML = ''; }, 280);
+}
+
+// ── Featured products horizontal scroll ─────────────────────
+export function renderFeaturedSection(wrapEl, scrollEl, products) {
+  if (!wrapEl || !scrollEl) return;
+  const featured = (products || []).filter(p => p.is_featured);
+  if (!featured.length) { wrapEl.hidden = true; return; }
+  scrollEl.innerHTML = featured.map(p => {
+    const name = p.name || 'Untitled';
+    const img  = p.image_url || p.image || '';
+    const media = img
+      ? `<img src="${esc(img)}" alt="${esc(name)}" loading="lazy" decoding="async"/>`
+      : `<div class="featured-card-fallback">${esc(p.emoji || '🌿')}</div>`;
+    return `
+      <div class="featured-card" data-id="${esc(p.id)}" role="button" tabindex="0" aria-label="${esc(name)}">
+        ${media}
+        <div class="featured-card-body">
+          <div class="featured-card-name">${esc(name)}</div>
+          <div class="featured-card-price">${esc(formatPrice(p.price))}</div>
+        </div>
+      </div>`;
+  }).join('');
+  scrollEl.querySelectorAll('.featured-card').forEach(card => {
+    const handler = () => openProductModal(card.dataset.id);
+    card.addEventListener('click', handler);
+    card.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler(); }
+    });
+  });
+  wrapEl.hidden = false;
 }

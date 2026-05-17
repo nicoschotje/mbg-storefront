@@ -28,6 +28,18 @@
 
   <div class="grain-overlay" aria-hidden="true"></div>
 
+  <!-- ── STORE CLOSED SCREEN ──────────────────── -->
+  <section id="storeClosedScreen" class="store-closed-screen" hidden>
+    <div class="store-closed-card">
+      <div class="store-closed-icon">🌿</div>
+      <h1 class="store-closed-title">We're Closed</h1>
+      <p class="store-closed-msg" id="storeClosedMsg">
+        The store is currently closed. Please check back later.
+      </p>
+      <p class="store-closed-hours" id="storeClosedHours"></p>
+    </div>
+  </section>
+
   <!-- ── LOGIN GATE ─────────────────────────────── -->
   <section id="loginScreen" class="login-screen">
     <div class="login-card">
@@ -95,6 +107,32 @@
     <div class="cat-nav" id="catNav" role="tablist"></div>
   </nav>
 
+  <!-- ── FEATURED PRODUCTS ─────────────────────── -->
+  <section class="featured-wrap" id="featuredWrap" hidden>
+    <h2 class="featured-title">Featured</h2>
+    <div class="featured-scroll" id="featuredScroll"></div>
+  </section>
+
+  <!-- ── SEARCH BAR ───────────────────────────── -->
+  <div class="search-wrap" id="searchWrap" hidden>
+    <div class="search-inner">
+      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      <input
+        id="searchInput"
+        class="search-input"
+        type="search"
+        inputmode="search"
+        enterkeyhint="search"
+        autocomplete="off"
+        placeholder="Search products…"
+        aria-label="Search products"
+      />
+      <button class="search-clear" id="searchClear" aria-label="Clear search" hidden>✕</button>
+    </div>
+  </div>
+
   <!-- ── PRODUCT SECTIONS ─────────────────────── -->
   <main class="products-wrap" id="productsWrap" hidden></main>
 
@@ -119,7 +157,7 @@
     import { showToast, installPopstateHandler } from './js/core/utils.js';
     import { bindLoginScreen, tryRestoreSession, getSession, getAuthPhone, onAuthChange, logout } from './js/core/auth.js';
     import { loadStoreSettings, loadBanners, loadAnnouncements, renderHero, renderAnnouncements } from './js/modules/banners.js';
-    import { loadCategories, loadProducts, renderCategoryNav, renderProductSections, getCategories } from './js/modules/products.js';
+    import { loadCategories, loadProducts, renderCategoryNav, renderProductSections, renderFeaturedSection, setSearchQuery, getCategories, getProducts } from './js/modules/products.js';
     import { loadDiscountRules, bindCartTriggers, getCartCount } from './js/modules/cart.js';
     import { openCheckoutScreen } from './js/modules/checkout.js';
     import { openTrackingScreen } from './js/modules/tracking.js';
@@ -151,11 +189,41 @@
       // Categories + products + discount rules
       await Promise.all([loadCategories(), loadProducts(), loadDiscountRules()]);
 
+      // Featured products horizontal scroll
+      renderFeaturedSection(
+        document.getElementById('featuredWrap'),
+        document.getElementById('featuredScroll'),
+        getProducts()
+      );
+
       const catNav = document.getElementById('catNav');
       const wrap   = document.getElementById('productsWrap');
 
       renderCategoryNav(catNav, () => renderProductSections(wrap, banners));
       renderProductSections(wrap, banners);
+
+      // ── Search bar wiring ─────────────────────
+      const searchWrap  = document.getElementById('searchWrap');
+      const searchInput = document.getElementById('searchInput');
+      const searchClear = document.getElementById('searchClear');
+      if (searchWrap) searchWrap.hidden = false;
+      let searchTimer;
+      searchInput?.addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          const q = searchInput.value;
+          setSearchQuery(q);
+          searchClear.hidden = !q;
+          renderProductSections(wrap, banners);
+        }, 200); // debounce — fast enough, won't fire on every keystroke
+      });
+      searchClear?.addEventListener('click', () => {
+        searchInput.value = '';
+        setSearchQuery('');
+        searchClear.hidden = true;
+        renderProductSections(wrap, banners);
+        searchInput.focus();
+      });
 
       // Cart wiring
       bindCartTriggers({
@@ -207,7 +275,12 @@
       errorElId:    'loginError',
       onLoggedIn: async () => {
         showApp();
-        await loadStorefront();
+        try {
+          await loadStorefront();
+        } catch (err) {
+          if (err?.message !== 'STORE_CLOSED') throw err;
+          // STORE_CLOSED is expected and handled — swallow silently
+        }
       }
     });
 
@@ -216,7 +289,12 @@
       const sess = await tryRestoreSession();
       if (sess) {
         showApp();
-        await loadStorefront();
+        try {
+          await loadStorefront();
+        } catch (err) {
+          if (err?.message !== 'STORE_CLOSED') throw err;
+          // STORE_CLOSED is expected and handled — swallow silently
+        }
       }
     })();
 
