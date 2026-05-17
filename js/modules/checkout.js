@@ -4,8 +4,8 @@
 import { sb, logActivity } from '../core/supabase.js';
 import { esc, formatPrice, normalisePhone, isValidPHPhone, openOverlay, closeOverlay, showToast } from '../core/utils.js';
 import { EDGE_URL, SUPABASE_ANON, PAYMENT_METHODS, DELIVERY_ZONES } from '../core/config.js';
-import { getStoreSettings } from './banners.js';
-import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo } from './cart.js';
+import { getStoreSettings } from './banners.js?v=20260517-loginfix';
+import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo } from './cart.js?v=20260517-loginfix';
 import { getSession, getAuthPhone } from '../core/auth.js';
 
 let _selectedPay = 'gcash';
@@ -460,4 +460,3 @@ export function showSuccessScreen(orderNum, items, total) {
 
 // Wire global event hook
 document.addEventListener('mbg:openCheckout', () => openCheckoutScreen());
-
