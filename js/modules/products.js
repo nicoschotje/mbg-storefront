@@ -153,3 +153,33 @@ export function closeProductModal() {
   closeOverlay('productModal');
   setTimeout(() => { if (host && !host.classList.contains('open')) host.innerHTML = ''; }, 280);
 }
+
+// ── Featured products horizontal scroll ─────────────────────
+export function renderFeaturedSection(wrapEl, scrollEl, products) {
+  if (!wrapEl || !scrollEl) return;
+  const featured = (products || []).filter(p => p.is_featured);
+  if (!featured.length) { wrapEl.hidden = true; return; }
+  scrollEl.innerHTML = featured.map(p => {
+    const name = p.name || 'Untitled';
+    const img  = p.image_url || p.image || '';
+    const media = img
+      ? `<img src="${esc(img)}" alt="${esc(name)}" loading="lazy" decoding="async"/>`
+      : `<div class="featured-card-fallback">${esc(p.emoji || '🌿')}</div>`;
+    return `
+      <div class="featured-card" data-id="${esc(p.id)}" role="button" tabindex="0" aria-label="${esc(name)}">
+        ${media}
+        <div class="featured-card-body">
+          <div class="featured-card-name">${esc(name)}</div>
+          <div class="featured-card-price">${esc(formatPrice(p.price))}</div>
+        </div>
+      </div>`;
+  }).join('');
+  scrollEl.querySelectorAll('.featured-card').forEach(card => {
+    const handler = () => openProductModal(card.dataset.id);
+    card.addEventListener('click', handler);
+    card.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler(); }
+    });
+  });
+  wrapEl.hidden = false;
+}

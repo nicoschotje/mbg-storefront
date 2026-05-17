@@ -107,6 +107,12 @@
     <div class="cat-nav" id="catNav" role="tablist"></div>
   </nav>
 
+  <!-- ── FEATURED PRODUCTS ─────────────────────── -->
+  <section class="featured-wrap" id="featuredWrap" hidden>
+    <h2 class="featured-title">Featured</h2>
+    <div class="featured-scroll" id="featuredScroll"></div>
+  </section>
+
   <!-- ── PRODUCT SECTIONS ─────────────────────── -->
   <main class="products-wrap" id="productsWrap" hidden></main>
 
@@ -131,7 +137,7 @@
     import { showToast, installPopstateHandler } from './js/core/utils.js';
     import { bindLoginScreen, tryRestoreSession, getSession, getAuthPhone, onAuthChange, logout } from './js/core/auth.js';
     import { loadStoreSettings, loadBanners, loadAnnouncements, renderHero, renderAnnouncements } from './js/modules/banners.js';
-    import { loadCategories, loadProducts, renderCategoryNav, renderProductSections, getCategories } from './js/modules/products.js';
+    import { loadCategories, loadProducts, renderCategoryNav, renderProductSections, renderFeaturedSection, getCategories, getProducts } from './js/modules/products.js';
     import { loadDiscountRules, bindCartTriggers, getCartCount } from './js/modules/cart.js';
     import { openCheckoutScreen } from './js/modules/checkout.js';
     import { openTrackingScreen } from './js/modules/tracking.js';
@@ -162,6 +168,13 @@
 
       // Categories + products + discount rules
       await Promise.all([loadCategories(), loadProducts(), loadDiscountRules()]);
+
+      // Featured products horizontal scroll
+      renderFeaturedSection(
+        document.getElementById('featuredWrap'),
+        document.getElementById('featuredScroll'),
+        getProducts()
+      );
 
       const catNav = document.getElementById('catNav');
       const wrap   = document.getElementById('productsWrap');
