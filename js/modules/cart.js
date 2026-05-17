@@ -2,7 +2,7 @@
 import { sb } from '../core/supabase.js';
 import { esc, formatPrice, openOverlay, closeOverlay, showToast } from '../core/utils.js';
 import { DEFAULT_FREE_DELIVERY_THRESHOLD } from '../core/config.js';
-import { getStoreSettings } from './banners.js';
+import { getStoreSettings } from './banners.js?v=20260517-loginfix';
 
 // In-memory cart  { [productId]: { product, qty } }
 let _cart = {};
@@ -229,4 +229,3 @@ function renderCartDrawer(drawer) {
     document.dispatchEvent(new CustomEvent('mbg:openCheckout'));
   });
 }
-
