@@ -185,15 +185,83 @@ function renderPayInfo(box, method, totalPHP) {
     return;
   }
   if (method === 'usdt') {
-    box.innerHTML = `<div class="pay-info">
-      <h4>USDT (TRC-20)</h4>
-      <div class="pay-row"><span>Wallet</span><b class="mono">${esc(ss?.crypto_usdt_address || '—')}</b></div>
-      <p class="pay-note">Send the PHP equivalent in USDT, then upload the txn screenshot.</p>
-      <input type="file" id="receiptFile" accept="image/*" capture="environment"/>
-    </div>`;
+    renderUSDTPayment(box);
     return;
   }
   box.innerHTML = '';
+}
+
+// ── USDT payment rendering ──────────────────────────────────
+function renderUSDTPayment(box) {
+  if (!box) return;
+  const ss = getStoreSettings();
+  const networks = [
+    { id: 'erc20',   label: 'ERC-20 (Ethereum)', color: '#627EEA' },
+    { id: 'trc20',   label: 'TRC-20 (TRON)',     color: '#EB0029' },
+    { id: 'bep20',   label: 'BEP-20 (BSC)',      color: '#F0B90B' },
+    { id: 'polygon', label: 'Polygon (MATIC)',   color: '#8247E5' },
+  ];
+  const walletAddress = ss?.crypto_usdt_address || ss?.usdt_wallet_address || '';
+  const qrUrl         = ss?.crypto_qr_url || ss?.usdt_qr_url || '';
+  box.innerHTML = `<div class="pay-info usdt-block">
+    <h4>USDT Payment</h4>
+    <div class="usdt-rate" id="usdtRate">Fetching live rate…</div>
+    <div class="usdt-network-label">Select network:</div>
+    <div class="usdt-network-grid">
+      ${networks.map((n, i) => `
+        <label class="usdt-network-option${i === 0 ? ' selected' : ''}">
+          <input type="radio" name="usdtNetwork" value="${esc(n.id)}" ${i === 0 ? 'checked' : ''}/>
+          <span class="usdt-network-dot" style="background:${esc(n.color)}"></span>
+          <span class="usdt-network-name">${esc(n.label)}</span>
+        </label>`).join('')}
+    </div>
+    ${qrUrl ? `<img class="usdt-qr" src="${esc(qrUrl)}" alt="USDT QR code" loading="lazy"/>` : ''}
+    <div class="usdt-address-wrap">
+      <span class="usdt-address" id="usdtAddress">${esc(walletAddress || '—')}</span>
+      <button class="usdt-copy-btn" id="usdtCopyBtn" type="button" aria-label="Copy wallet address">Copy</button>
+    </div>
+    <p class="usdt-warning">&#9888; Always confirm the network matches before sending. Sending to the wrong network results in permanent loss.</p>
+    <p class="pay-note">After sending, upload your transaction screenshot below.</p>
+    <input type="file" id="receiptFile" accept="image/*" capture="environment"/>
+  </div>`;
+
+  // Network selection highlight
+  box.querySelectorAll('.usdt-network-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+      box.querySelectorAll('.usdt-network-option').forEach(o => o.classList.remove('selected'));
+      opt.classList.add('selected');
+    });
+  });
+
+  // Copy wallet address to clipboard
+  box.querySelector('#usdtCopyBtn')?.addEventListener('click', async () => {
+    if (!walletAddress) return;
+    try {
+      await navigator.clipboard.writeText(walletAddress);
+      const btn = box.querySelector('#usdtCopyBtn');
+      if (btn) { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy'; }, 2000); }
+    } catch(_) { showToast('Copy failed — select the address manually'); }
+  });
+
+  // Live PHP rate from CoinGecko
+  fetchUSDTPHPRate(box);
+}
+
+async function fetchUSDTPHPRate(box) {
+  let phpRate = null;
+  try {
+    const res = await fetch(
+      'https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=php',
+      { cache: 'no-store' }
+    );
+    const data = await res.json();
+    phpRate = data?.tether?.php ?? null;
+  } catch(_) { /* rate unavailable — handled below */ }
+  const rateEl = box.querySelector('#usdtRate');
+  if (!rateEl) return;
+  rateEl.textContent = phpRate
+    ? `1 USDT ≈ ₱${phpRate.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : 'Live rate unavailable';
 }
 
 async function placeOrder(host) {

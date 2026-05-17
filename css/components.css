@@ -1167,3 +1167,75 @@ body.modal-open .appFooter {
   align-items: center;
   justify-content: center;
 }
+
+/* ── USDT PAYMENT BLOCK ──────────────────────── */
+.usdt-block { padding: 0.75rem 0; }
+.usdt-rate {
+  font-size: 0.85rem;
+  color: var(--gold);
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+}
+.usdt-network-label {
+  font-size: 0.8rem;
+  color: var(--text-light);
+  margin-bottom: 0.4rem;
+}
+.usdt-network-grid { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1rem; }
+.usdt-network-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  background: var(--bg-alt);
+  border: 1px solid transparent;
+  cursor: pointer;
+  min-height: 44px;
+  touch-action: manipulation;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+.usdt-network-option input[type="radio"] { display: none; }
+.usdt-network-option.selected {
+  background: var(--card-hover);
+  border-color: var(--gold);
+}
+.usdt-network-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.usdt-qr { display: block; width: 140px; height: 140px; object-fit: contain; margin: 0 auto 1rem; border-radius: 8px; }
+.usdt-address-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bg-alt);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.usdt-address {
+  flex: 1;
+  font-family: ui-monospace, 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  color: var(--text);
+  word-break: break-all;
+}
+.usdt-copy-btn {
+  flex-shrink: 0;
+  background: var(--gold);
+  color: var(--green-dark);
+  border: none;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.3rem 0.6rem;
+  min-height: 44px;
+  min-width: 44px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.usdt-warning {
+  font-size: 0.75rem;
+  color: var(--warning);
+  line-height: 1.5;
+  margin: 0 0 0.5rem;
+}
