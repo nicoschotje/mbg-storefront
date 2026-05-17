@@ -21,12 +21,16 @@
 [[headers]]
   for = "/css/*"
   [headers.values]
-    Cache-Control = "public, max-age=3600, must-revalidate"
+    # Same reasoning as /js/* — revalidate every load to avoid stale CSS.
+    Cache-Control = "no-cache, must-revalidate"
 
 [[headers]]
   for = "/js/*"
   [headers.values]
-    Cache-Control = "public, max-age=3600, must-revalidate"
+    # Was max-age=3600 — but JS modules don't have content-hash filenames,
+    # so a deploy could leave a customer with stale JS for up to 1h while
+    # the new HTML expected newer exports. Result: silent ESM link failure.
+    Cache-Control = "no-cache, must-revalidate"
 
 [[headers]]
   for = "/manifest.json"
