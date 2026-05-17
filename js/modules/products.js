@@ -3,9 +3,9 @@
  */
 import { sb } from '../core/supabase.js';
 import { esc, formatPrice, openOverlay, closeOverlay } from '../core/utils.js';
-import { renderCategoryBanner } from './banners.js';
-import { addToCart } from './cart.js';
-import { openRestockModal } from './restock.js';
+import { renderCategoryBanner } from './banners.js?v=20260517-loginfix';
+import { addToCart } from './cart.js?v=20260517-loginfix';
+import { openRestockModal } from './restock.js?v=20260517-loginfix';
 
 let _products = [];
 let _categories = [];
