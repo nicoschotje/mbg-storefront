@@ -1,7 +1,9 @@
 /* MBG Storefront v2 — Nominatim delivery-address autocomplete
  * Philippines-only address suggestions for the checkout address field.
  * On selection it stores the suggestion's coordinates so checkout can
- * include them in the place-order payload. Zone-based pricing is untouched.
+ * include them in the place-order payload and feed the distance-based
+ * delivery calculator. A `mbg:deliveryAddrChanged` event is dispatched
+ * whenever the coordinates are picked or cleared so checkout can re-quote.
  *
  * The #coAddr field is created on demand (and re-rendered) by checkout.js,
  * so this module listens at the document level rather than binding directly.
@@ -90,6 +92,7 @@ document.addEventListener('input', (e) => {
   if (e.target?.id !== FIELD_ID) return;
   // A manual edit invalidates the coordinates of any earlier selection.
   _selectedCoords = null;
+  document.dispatchEvent(new CustomEvent('mbg:deliveryAddrChanged'));
   const q = e.target.value.trim();
   _activeQuery = q;
   if (q.length < MIN_CHARS) {
@@ -113,6 +116,7 @@ document.addEventListener('click', (e) => {
       : null;
     _activeQuery = field ? field.value.trim() : '';
     hideSuggestions();
+    document.dispatchEvent(new CustomEvent('mbg:deliveryAddrChanged'));
     return;
   }
   if (e.target?.id !== FIELD_ID && !e.target.closest?.('.addr-suggest')) {

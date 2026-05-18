@@ -14,14 +14,17 @@ export const BRAND_NAME       = "Mr. Beanie's Greenies";
 export const BRAND_SHORT      = 'MBG';
 export const SUPPORT_TG_BOT   = 'MyWebShopStore_bot';
 
-// Default delivery zones (overridden by store_settings.delivery_rate_multiplier)
-export const DELIVERY_ZONES = [
-  { id: 'metro_near',  label: 'Metro Near',  fee: 85,  desc: 'NCR nearby areas' },
-  { id: 'metro_far',   label: 'Metro Far',   fee: 150, desc: 'Farther NCR areas' },
-  { id: 'provincial',  label: 'Provincial',  fee: 250, desc: 'Outside NCR' }
-];
+// Delivery pricing model
+// Flat-rate zones have been replaced by a distance-based calculator
+// (see js/modules/delivery.js). The fee is computed from the Haversine
+// distance between the store and the customer's selected coordinates,
+// scaled by store_settings.delivery_rate_multiplier (surge). When the
+// customer has no coordinates, checkout falls back to the flat
+// store_settings.delivery_fee. All pricing inputs are read live from
+// store_settings so the owner can tune them from the dashboard.
 
-// Free delivery threshold (fallback if store_settings has none)
+// Free delivery threshold (fallback only — store_settings.free_delivery_min
+// is the live value used at checkout).
 export const DEFAULT_FREE_DELIVERY_THRESHOLD = 5000;
 
 // Payment methods (mirror old storefront)

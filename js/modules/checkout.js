@@ -3,15 +3,14 @@
  */
 import { sb, logActivity } from '../core/supabase.js';
 import { esc, formatPrice, normalisePhone, isValidPHPhone, openOverlay, closeOverlay, showToast } from '../core/utils.js';
-import { EDGE_URL, SUPABASE_ANON, PAYMENT_METHODS, DELIVERY_ZONES } from '../core/config.js';
+import { EDGE_URL, SUPABASE_ANON, PAYMENT_METHODS } from '../core/config.js';
 import { getStoreSettings } from './banners.js?v=20260518-supabase-repoint';
 import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo } from './cart.js?v=20260518-supabase-repoint';
 import { getSession, getAuthPhone } from '../core/auth.js';
-import { getSelectedCoords } from './address.js?v=20260518-features';
+import { getSelectedCoords } from './address.js?v=20260518-delivery';
+import { calculateDelivery } from './delivery.js?v=20260518-delivery';
 
 let _selectedPay = 'gcash';
-let _selectedZone = 'metro_near';
-let _deliveryFee = 85;
 
 export function openCheckoutScreen() {
   const session = getSession();
@@ -40,22 +39,83 @@ export function closeCheckoutScreen() {
   closeOverlay('checkoutScreen');
 }
 
+// Runs the distance-based calculator with the live store_settings values
+// and whatever customer coordinates the address autocomplete has captured.
+function computeDelivery(ss, subtotal) {
+  const coords = getSelectedCoords();
+  return calculateDelivery({
+    storeLat:        Number(ss?.store_lat),
+    storeLng:        Number(ss?.store_lng),
+    customerLat:     coords ? coords.lat : null,
+    customerLng:     coords ? coords.lng : null,
+    subtotal,
+    surgeMultiplier: ss?.delivery_rate_multiplier,
+    freeDeliveryMin: ss?.free_delivery_min,
+    fallbackFee:     Number(ss?.delivery_fee) || 0
+  });
+}
+
+// Recomputes the quote and updates the delivery-related DOM in place.
+// Called after each render and whenever the address coordinates change,
+// so the customer sees the fee react without losing their typed input.
+function refreshDelivery(host) {
+  const ss = getStoreSettings();
+  const subtotal = getSubtotal();
+  const disc = getDiscount();
+  const delivery = computeDelivery(ss, subtotal);
+  const total = Math.max(0, subtotal + delivery.fee - disc.amount);
+
+  const labelEl = host.querySelector('#deliveryLabel');
+  if (labelEl) labelEl.textContent = delivery.label;
+
+  const feeEl = host.querySelector('#coDeliveryFee');
+  if (feeEl) feeEl.textContent = delivery.fee === 0 ? 'FREE' : formatPrice(delivery.fee);
+
+  const totalEl = host.querySelector('#coTotal');
+  if (totalEl) totalEl.textContent = formatPrice(total);
+
+  const btn = host.querySelector('#placeOrderBtn');
+  if (btn && !btn.disabled) btn.textContent = `Place Order · ${formatPrice(total)}`;
+
+  const noteEl = host.querySelector('#deliveryNote');
+  if (noteEl) {
+    const isEstimate = !getSelectedCoords() && delivery.fee > 0;
+    noteEl.textContent = isEstimate
+      ? 'Delivery fee estimated — enter a full address for an exact quote.'
+      : '';
+    noteEl.hidden = !isEstimate;
+  }
+}
+
+// The address autocomplete fires this when coordinates are picked or cleared.
+document.addEventListener('mbg:deliveryAddrChanged', () => {
+  const host = document.getElementById('checkoutScreen');
+  if (host && host.classList.contains('open')) refreshDelivery(host);
+});
+
 function renderCheckout(host, session) {
   const ss = getStoreSettings();
   const items = getCartItems();
   const subtotal = getSubtotal();
   const disc = getDiscount();
 
-  // Sync delivery fee
-  const zone = DELIVERY_ZONES.find(z => z.id === _selectedZone) || DELIVERY_ZONES[0];
-  _deliveryFee = zone.fee;
-  const mult = Number(ss?.delivery_rate_multiplier) || 1;
-  const adjFee = Math.round(_deliveryFee * mult);
+  // A re-render rebuilds every field — preserve whatever the customer has
+  // already typed (the delivery address in particular must survive).
+  const prev = {
+    name:  host.querySelector('#coName')?.value,
+    phone: host.querySelector('#coPhone')?.value,
+    addr:  host.querySelector('#coAddr')?.value,
+    notes: host.querySelector('#coNotes')?.value,
+    promo: host.querySelector('#coPromo')?.value
+  };
+  const valName  = prev.name  !== undefined ? prev.name  : (session?.display_name || '');
+  const valPhone = prev.phone !== undefined ? prev.phone : (getAuthPhone() || session?.phone || '');
+  const valAddr  = prev.addr  !== undefined ? prev.addr  : (session?.saved_address || '');
+  const valNotes = prev.notes !== undefined ? prev.notes : '';
+  const valPromo = prev.promo !== undefined ? prev.promo : (getAppliedPromo() || '');
 
-  // Free delivery if subtotal hits threshold
-  const fdt = Number(ss?.free_delivery_threshold) || 5000;
-  const finalFee = subtotal >= fdt ? 0 : adjFee;
-  const total = Math.max(0, subtotal + finalFee - disc.amount);
+  const delivery = computeDelivery(ss, subtotal);
+  const total = Math.max(0, subtotal + delivery.fee - disc.amount);
 
   // Filter pay methods — hide USDT if not enabled
   const cryptoOn = !!(ss?.crypto_enabled && ss?.crypto_usdt_address);
@@ -73,35 +133,26 @@ function renderCheckout(host, session) {
         <h3>Your details</h3>
         <label class="field">
           <span>Full name</span>
-          <input id="coName" type="text" autocomplete="name" placeholder="Juan Dela Cruz" value="${esc(session?.display_name || '')}">
+          <input id="coName" type="text" autocomplete="name" placeholder="Juan Dela Cruz" value="${esc(valName)}">
         </label>
         <label class="field">
           <span>Mobile number</span>
-          <input id="coPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+63 9XX XXX XXXX" value="${esc(getAuthPhone() || session?.phone || '')}">
+          <input id="coPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+63 9XX XXX XXXX" value="${esc(valPhone)}">
         </label>
         <label class="field">
           <span>Complete delivery address</span>
-          <textarea id="coAddr" rows="3" placeholder="House/Unit, Street, Barangay, City">${esc(session?.saved_address || '')}</textarea>
+          <textarea id="coAddr" rows="3" placeholder="House/Unit, Street, Barangay, City">${esc(valAddr)}</textarea>
         </label>
         <label class="field">
           <span>Delivery notes (optional)</span>
-          <input id="coNotes" type="text" placeholder="Landmarks, gate code, etc.">
+          <input id="coNotes" type="text" placeholder="Landmarks, gate code, etc." value="${esc(valNotes)}">
         </label>
       </section>
 
       <section class="check-section">
-        <h3>Delivery zone</h3>
-        <div class="zone-grid">
-          ${DELIVERY_ZONES.map(z => {
-            const active = z.id === _selectedZone ? ' active' : '';
-            const fee = Math.round(z.fee * mult);
-            return `<button type="button" class="zone-pill${active}" data-zone="${esc(z.id)}" data-fee="${fee}">
-              <div class="zp-title">${esc(z.label)}</div>
-              <div class="zp-fee">${esc(formatPrice(fee))}</div>
-              <div class="zp-desc">${esc(z.desc)}</div>
-            </button>`;
-          }).join('')}
-        </div>
+        <h3>Delivery</h3>
+        <div class="delivery-quote"><b id="deliveryLabel">${esc(delivery.label)}</b></div>
+        <p class="delivery-note" id="deliveryNote" hidden></p>
       </section>
 
       <section class="check-section">
@@ -117,7 +168,7 @@ function renderCheckout(host, session) {
         <div id="payInfoBox" class="pay-info-box"></div>
         <label class="field" id="promoFieldCo">
           <span>Promo code (optional)</span>
-          <input id="coPromo" type="text" maxlength="20" value="${esc(getAppliedPromo() || '')}" placeholder="e.g. WELCOME10">
+          <input id="coPromo" type="text" maxlength="20" value="${esc(valPromo)}" placeholder="e.g. WELCOME10">
         </label>
       </section>
 
@@ -131,9 +182,9 @@ function renderCheckout(host, session) {
         </div>
         <div class="summary-totals">
           <div class="row"><span>Subtotal</span><b>${esc(formatPrice(subtotal))}</b></div>
-          <div class="row"><span>Delivery (${esc(zone.label)})</span><b>${finalFee === 0 ? 'FREE' : esc(formatPrice(finalFee))}</b></div>
+          <div class="row"><span>Delivery</span><b id="coDeliveryFee">${delivery.fee === 0 ? 'FREE' : esc(formatPrice(delivery.fee))}</b></div>
           ${disc.amount > 0 ? `<div class="row"><span>Discount</span><b>− ${esc(formatPrice(disc.amount))}</b></div>` : ''}
-          <div class="row total"><span>Total</span><b>${esc(formatPrice(total))}</b></div>
+          <div class="row total"><span>Total</span><b id="coTotal">${esc(formatPrice(total))}</b></div>
         </div>
       </section>
     </div>
@@ -143,10 +194,6 @@ function renderCheckout(host, session) {
     </div>`;
 
   host.querySelector('.checkout-back')?.addEventListener('click', closeCheckoutScreen);
-  host.querySelectorAll('.zone-pill').forEach(p => p.addEventListener('click', () => {
-    _selectedZone = p.dataset.zone;
-    renderCheckout(host, session);
-  }));
   host.querySelectorAll('.pay-option').forEach(p => p.addEventListener('click', () => {
     _selectedPay = p.dataset.pay;
     renderCheckout(host, session);
@@ -154,6 +201,7 @@ function renderCheckout(host, session) {
   renderPayInfo(host.querySelector('#payInfoBox'), _selectedPay, total);
 
   host.querySelector('#placeOrderBtn')?.addEventListener('click', () => placeOrder(host));
+  refreshDelivery(host);
 }
 
 function renderPayInfo(box, method, totalPHP) {
@@ -282,11 +330,8 @@ async function placeOrder(host) {
   const subtotal = getSubtotal();
   const disc     = getDiscount();
   const ss = getStoreSettings();
-  const mult = Number(ss?.delivery_rate_multiplier) || 1;
-  const zone = DELIVERY_ZONES.find(z => z.id === _selectedZone) || DELIVERY_ZONES[0];
-  const fdt  = Number(ss?.free_delivery_threshold) || 5000;
-  const adjFee = Math.round(zone.fee * mult);
-  const finalFee = subtotal >= fdt ? 0 : adjFee;
+  const delivery = computeDelivery(ss, subtotal);
+  const finalFee = delivery.fee;
   const total  = Math.max(0, subtotal + finalFee - disc.amount);
 
   const needsReceipt = ['gcash','maya','bank_transfer','usdt'].includes(_selectedPay);
@@ -311,7 +356,7 @@ async function placeOrder(host) {
       customer_name:    name,
       customer_phone:   phone,
       delivery_address: addr,
-      delivery_zone:    _selectedZone,
+      delivery_zone:    getSelectedCoords() ? 'distance' : 'estimated',
       delivery_fee:     finalFee,
       subtotal:         Number(subtotal.toFixed(2)),
       total:            Number(total.toFixed(2)),
