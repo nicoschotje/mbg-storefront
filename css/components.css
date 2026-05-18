@@ -11,8 +11,13 @@
   --tilt-x: 0deg;
   --tilt-y: 0deg;
 
-  background: var(--card);
-  border: 1px solid rgba(200, 184, 152, 0.6);
+  /* Frosted-glass card — translucent cream over the animated background.
+     Kept light (not dark) so the dark product text stays readable. */
+  background: rgba(246, 240, 224, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-top-color: rgba(255, 255, 255, 0.18);
   border-radius: var(--radius-md);
   overflow: hidden;
   cursor: pointer;
@@ -165,9 +170,15 @@
   font-weight: 700;
   letter-spacing: 0.04em;
   min-height: 44px;
-  transition: background 0.15s, transform 0.12s;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.32), 0 2px 8px rgba(0,0,0,0.20);
+  transform: translateY(0);
+  transition: background 0.15s, transform 0.1s ease, box-shadow 0.1s ease;
 }
-.product-add-btn:active { transform: scale(0.97); background: var(--green); }
+.product-add-btn:active {
+  background: var(--green);
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.32);
+}
 .notify-btn {
   width: 100%;
   background: transparent;
@@ -326,9 +337,14 @@
 .cta-add-bag {
   background: var(--green-dark);
   color: var(--green-leaf);
-  box-shadow: 0 6px 20px rgba(25,45,30,0.35);
+  box-shadow: 0 4px 0 rgba(0,0,0,0.30), 0 6px 20px rgba(25,45,30,0.35);
+  transform: translateY(0);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
-.cta-add-bag:active { transform: scale(0.98); }
+.cta-add-bag:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.30), 0 4px 12px rgba(25,45,30,0.30);
+}
 .cta-notify {
   background: transparent;
   color: var(--amber);
@@ -465,10 +481,15 @@
   font-size: 0.95rem;
   font-weight: 700;
   letter-spacing: 0.02em;
-  box-shadow: 0 6px 20px rgba(25,45,30,0.35);
+  box-shadow: 0 4px 0 rgba(0,0,0,0.30), 0 6px 20px rgba(25,45,30,0.35);
   min-height: 56px;
+  transform: translateY(0);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
-.cart-checkout-btn:active { transform: scale(0.98); }
+.cart-checkout-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.30), 0 4px 12px rgba(25,45,30,0.30);
+}
 
 /* ── CHECKOUT SCREEN ───────────────────────────────────── */
 .checkout-screen, .tracking-screen, .success-screen {
@@ -703,12 +724,17 @@
   font-size: 0.98rem;
   font-weight: 700;
   letter-spacing: 0.02em;
-  box-shadow: 0 6px 20px rgba(25,45,30,0.35);
+  box-shadow: 0 4px 0 rgba(0,0,0,0.30), 0 6px 20px rgba(25,45,30,0.35);
   min-height: 56px;
+  transform: translateY(0);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
   display: flex; align-items: center; justify-content: center; gap: 0.5rem;
 }
 .place-order-btn:disabled { opacity: 0.6; }
-.place-order-btn:active { transform: scale(0.98); }
+.place-order-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.30), 0 4px 12px rgba(25,45,30,0.30);
+}
 
 .btn-primary {
   width: 100%;
@@ -720,10 +746,15 @@
   font-size: 0.9rem;
   font-weight: 700;
   letter-spacing: 0.02em;
-  box-shadow: 0 4px 14px rgba(25,45,30,0.25);
+  box-shadow: 0 4px 0 rgba(0,0,0,0.30), 0 4px 14px rgba(25,45,30,0.25);
   min-height: 56px;
+  transform: translateY(0);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
-.btn-primary:active { transform: scale(0.98); }
+.btn-primary:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.30), 0 3px 10px rgba(25,45,30,0.22);
+}
 .btn-ghost {
   width: 100%;
   background: transparent;
@@ -1090,7 +1121,8 @@ body.modal-open .appFooter {
   font-family: var(--font-display);
   font-size: 1.1rem;
   font-weight: 700;
-  color: var(--text);
+  /* Sits directly on the dark animated background */
+  color: var(--cream);
   padding: 0 1rem 0.75rem;
   margin: 0;
 }
@@ -1406,3 +1438,6 @@ body.modal-open .appFooter {
 .acct-item:active { background: var(--card-hover); }
 .acct-ico { font-size: 1.2rem; line-height: 1; }
 .acct-item-danger { color: var(--danger); }
+
+/* Footer links must stay legible on the dark animated background */
+.footer a { color: var(--green-leaf); font-weight: 600; }

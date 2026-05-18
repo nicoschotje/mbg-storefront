@@ -26,6 +26,12 @@
 </head>
 <body>
 
+  <!-- Animated gradient background + floating depth orbs (CSS only) -->
+  <div class="app-bg" aria-hidden="true"></div>
+  <div class="bg-orb bg-orb-1" aria-hidden="true"></div>
+  <div class="bg-orb bg-orb-2" aria-hidden="true"></div>
+  <div class="bg-orb bg-orb-3" aria-hidden="true"></div>
+
   <div class="grain-overlay" aria-hidden="true"></div>
 
   <!-- ── STORE CLOSED SCREEN ──────────────────── -->
@@ -138,7 +144,7 @@
   <main class="products-wrap" id="productsWrap" hidden></main>
 
   <!-- ── FOOTER LINKS ─────────────────────────── -->
-  <footer class="footer" id="appFooter" hidden style="text-align:center;padding:1.5rem 1rem calc(var(--bottom-nav-h) + var(--safe-bottom) + 1.5rem);color:var(--text-light);font-size:0.78rem;line-height:1.6;">
+  <footer class="footer" id="appFooter" hidden style="text-align:center;padding:1.5rem 1rem calc(var(--bottom-nav-h) + var(--safe-bottom) + 1.5rem);color:rgba(253,250,240,0.55);font-size:0.78rem;line-height:1.6;">
     <div style="margin-bottom: 0.5rem;">
       <a href="#" id="openTrackingLink">My Orders</a>
       &nbsp;·&nbsp;

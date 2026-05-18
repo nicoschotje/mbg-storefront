@@ -10,6 +10,66 @@ body.lock-scroll { overflow: hidden; }
   background-size: 128px 128px;
 }
 
+/* ── ANIMATED BACKGROUND ────────────────────────────────────────────────
+   A living dark-forest gradient sits behind everything. .app-bg and the
+   orbs use negative z-index so all normal-flow content paints above them
+   without needing per-section stacking contexts. */
+.app-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background: linear-gradient(
+    135deg,
+    #0d1f12 0%,
+    #192D1E 40%,
+    #1a3020 70%,
+    #0d1f12 100%
+  );
+  background-size: 400% 400%;
+  animation: gradientShift 12s ease infinite;
+}
+@keyframes gradientShift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Large blurred orbs add depth/atmosphere — pure CSS, no JS, no canvas. */
+.bg-orb {
+  position: fixed;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 50%;
+  will-change: transform;
+}
+.bg-orb-1 {
+  width: 420px; height: 420px;
+  top: -120px; left: -120px;
+  background: radial-gradient(circle, rgba(46,80,50,0.34) 0%, transparent 70%);
+  animation: orbFloat 20s ease-in-out infinite;
+}
+.bg-orb-2 {
+  width: 360px; height: 360px;
+  bottom: -100px; right: -110px;
+  background: radial-gradient(circle, rgba(200,160,56,0.16) 0%, transparent 70%);
+  animation: orbFloat 26s ease-in-out infinite reverse;
+}
+.bg-orb-3 {
+  width: 300px; height: 300px;
+  top: 38%; left: 50%;
+  background: radial-gradient(circle, rgba(184,212,144,0.12) 0%, transparent 70%);
+  animation: orbFloat 32s ease-in-out infinite;
+}
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0); }
+  33%      { transform: translate(30px, -20px); }
+  66%      { transform: translate(-20px, 30px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-bg, .bg-orb { animation: none; }
+}
+
 /* ── HEADER ─────────────────────────────────────────────── */
 .header {
   position: sticky;
@@ -398,7 +458,8 @@ body.lock-scroll { overflow: hidden; }
 .empty {
   text-align: center;
   padding: 2.5rem 1.5rem;
-  color: var(--text-light);
+  /* Sits on the dark animated background — needs a light tone */
+  color: rgba(253, 250, 240, 0.62);
   font-size: 0.85rem;
 }
 .empty .empty-emoji {
@@ -407,7 +468,7 @@ body.lock-scroll { overflow: hidden; }
 }
 
 /* Loading */
-.loading { padding: 2rem; text-align: center; color: var(--text-light); }
+.loading { padding: 2rem; text-align: center; color: rgba(253, 250, 240, 0.62); }
 
 /* ── FIXED BOTTOM NAVIGATION (mobile) ───────────────────────────────────
    The primary mobile navigation. Sits above page content but below the
