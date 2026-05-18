@@ -8,7 +8,7 @@
  * The #coAddr field is created on demand (and re-rendered) by checkout.js,
  * so this module listens at the document level rather than binding directly.
  */
-import { esc } from '../core/utils.js?v=20260518-supabase-repoint';
+import { esc } from '../core/utils.js?v=20260518-mobile';
 
 const FIELD_ID = 'coAddr';
 const MIN_CHARS = 3;

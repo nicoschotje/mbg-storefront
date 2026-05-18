@@ -7,9 +7,9 @@
  *   revoke_remember_tokens, logout_customer_session
  */
 
-import { sb, logActivity } from './supabase.js?v=20260518-supabase-repoint';
-import { showToast, esc, normalisePhone, isValidPHPhone, bufferToBase64url, base64urlToBuffer, isInAppBrowser } from './utils.js?v=20260518-supabase-repoint';
-import { LOGIN_FAIL_LIMIT, LOGIN_LOCKOUT_MS, PIN_MIN_LENGTH, PIN_MAX_LENGTH } from './config.js?v=20260518-supabase-repoint';
+import { sb, logActivity } from './supabase.js?v=20260518-mobile';
+import { showToast, esc, normalisePhone, isValidPHPhone, bufferToBase64url, base64urlToBuffer, isInAppBrowser } from './utils.js?v=20260518-mobile';
+import { LOGIN_FAIL_LIMIT, LOGIN_LOCKOUT_MS, PIN_MIN_LENGTH, PIN_MAX_LENGTH } from './config.js?v=20260518-mobile';
 
 let _session = null;
 let _phone = null;
