@@ -16,7 +16,9 @@ export function getProducts() { return _products; }
 export function getCategories() { return _categories; }
 
 export function setSearchQuery(q) {
-  _searchQuery = (q || '').toLowerCase().trim();
+  // Require at least 2 characters before filtering kicks in.
+  const v = (q || '').toLowerCase().trim();
+  _searchQuery = v.length >= 2 ? v : '';
 }
 export function getSearchQuery() { return _searchQuery; }
 
@@ -98,11 +100,12 @@ export function renderProductSections(targetEl, banners = []) {
       if (!list.length && _activeCat === 'All') return;
       const isWide = /dab|concentr/i.test(cat.name);
       const banner = banners.find(b => b.category_name === cat.name) || null;
-      html += `<div class="category-section" data-cat="${esc(cat.name)}">${renderCategoryBanner(cat, banner)}<div class="product-grid${isWide?' product-grid-wide':''}">${list.map(p => productCardHtml(p, isWide)).join('') || '<div class="empty">Nothing in this collection yet.</div>'}</div></div>`;
+      const emptyMsg = _searchQuery ? 'No products found' : 'Nothing in this collection yet.';
+      html += `<div class="category-section" data-cat="${esc(cat.name)}">${renderCategoryBanner(cat, banner)}<div class="product-grid${isWide?' product-grid-wide':''}">${list.map(p => productCardHtml(p, isWide)).join('') || `<div class="empty">${emptyMsg}</div>`}</div></div>`;
     });
   }
   if (!html && _searchQuery) {
-    html = `<div class="empty">No products match “${esc(_searchQuery)}”.</div>`;
+    html = `<div class="empty">No products found</div>`;
   }
   targetEl.innerHTML = html;
   targetEl.querySelectorAll('.product-card').forEach(card => {
