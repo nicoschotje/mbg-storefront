@@ -217,7 +217,7 @@ function renderPayInfo(box, method, totalPHP) {
       <div class="pay-row"><span>Number</span><b>${esc(num || 'See QR')}</b></div>
       ${qrUrl ? `<img class="pay-qr" src="${esc(qrUrl)}" alt="QR code"/>` : ''}
       <p class="pay-note">After paying, upload your receipt screenshot below.</p>
-      <input type="file" id="receiptFile" accept="image/*" capture="environment"/>
+      <input type="file" id="receiptFile" accept="image/png,image/jpeg,image/jpg,image/webp"/>
     </div>`;
     return;
   }
@@ -229,7 +229,7 @@ function renderPayInfo(box, method, totalPHP) {
       <div class="pay-row"><span>Account number</span><b>${esc(ss?.bank_account_number || '—')}</b></div>
       ${ss?.bank_qr_url ? `<img class="pay-qr" src="${esc(ss.bank_qr_url)}" alt="Bank QR"/>` : ''}
       <p class="pay-note">After transferring, upload your receipt below.</p>
-      <input type="file" id="receiptFile" accept="image/*" capture="environment"/>
+      <input type="file" id="receiptFile" accept="image/png,image/jpeg,image/jpg,image/webp"/>
     </div>`;
     return;
   }
@@ -271,7 +271,7 @@ function renderUSDTPayment(box) {
     </div>
     <p class="usdt-warning">&#9888; Always confirm the network matches before sending. Sending to the wrong network results in permanent loss.</p>
     <p class="pay-note">After sending, upload your transaction screenshot below.</p>
-    <input type="file" id="receiptFile" accept="image/*" capture="environment"/>
+    <input type="file" id="receiptFile" accept="image/png,image/jpeg,image/jpg,image/webp"/>
   </div>`;
 
   // Network selection highlight
