@@ -7,6 +7,7 @@ import { EDGE_URL, SUPABASE_ANON, PAYMENT_METHODS, DELIVERY_ZONES } from '../cor
 import { getStoreSettings } from './banners.js?v=20260518-supabase-repoint';
 import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo } from './cart.js?v=20260518-supabase-repoint';
 import { getSession, getAuthPhone } from '../core/auth.js';
+import { getSelectedCoords } from './address.js?v=20260518-features';
 
 let _selectedPay = 'gcash';
 let _selectedZone = 'metro_near';
@@ -325,6 +326,14 @@ async function placeOrder(host) {
         image_url: p.image_url || p.image || null
       }))
     };
+
+    // Attach delivery coordinates only if the customer picked a Nominatim
+    // suggestion — a manually typed address still places the order fine.
+    const coords = getSelectedCoords();
+    if (coords) {
+      payload.delivery_lat = coords.lat;
+      payload.delivery_lng = coords.lng;
+    }
 
     const resp = await fetch(`${EDGE_URL}/place-order`, {
       method: 'POST',
