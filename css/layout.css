@@ -10,6 +10,66 @@ body.lock-scroll { overflow: hidden; }
   background-size: 128px 128px;
 }
 
+/* ── ANIMATED BACKGROUND ────────────────────────────────────────────────
+   A living dark-forest gradient sits behind everything. .app-bg and the
+   orbs use negative z-index so all normal-flow content paints above them
+   without needing per-section stacking contexts. */
+.app-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background: linear-gradient(
+    135deg,
+    #0d1f12 0%,
+    #192D1E 40%,
+    #1a3020 70%,
+    #0d1f12 100%
+  );
+  background-size: 400% 400%;
+  animation: gradientShift 12s ease infinite;
+}
+@keyframes gradientShift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Large blurred orbs add depth/atmosphere — pure CSS, no JS, no canvas. */
+.bg-orb {
+  position: fixed;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 50%;
+  will-change: transform;
+}
+.bg-orb-1 {
+  width: 420px; height: 420px;
+  top: -120px; left: -120px;
+  background: radial-gradient(circle, rgba(46,80,50,0.34) 0%, transparent 70%);
+  animation: orbFloat 20s ease-in-out infinite;
+}
+.bg-orb-2 {
+  width: 360px; height: 360px;
+  bottom: -100px; right: -110px;
+  background: radial-gradient(circle, rgba(200,160,56,0.16) 0%, transparent 70%);
+  animation: orbFloat 26s ease-in-out infinite reverse;
+}
+.bg-orb-3 {
+  width: 300px; height: 300px;
+  top: 38%; left: 50%;
+  background: radial-gradient(circle, rgba(184,212,144,0.12) 0%, transparent 70%);
+  animation: orbFloat 32s ease-in-out infinite;
+}
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0); }
+  33%      { transform: translate(30px, -20px); }
+  66%      { transform: translate(-20px, 30px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-bg, .bg-orb { animation: none; }
+}
+
 /* ── HEADER ─────────────────────────────────────────────── */
 .header {
   position: sticky;
@@ -19,7 +79,8 @@ body.lock-scroll { overflow: hidden; }
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   border-bottom: 1px solid rgba(200, 184, 152, 0.5);
-  padding: max(0.8rem, env(safe-area-inset-top)) 1rem 0.8rem;
+  /* 0.8rem of breathing room ON TOP of the notch inset */
+  padding: calc(0.8rem + var(--safe-top)) 1rem 0.8rem;
 }
 .header-inner {
   max-width: var(--max-w);
@@ -97,6 +158,12 @@ body.lock-scroll { overflow: hidden; }
 }
 .cart-btn:active { transform: scale(0.96); }
 .cart-btn svg { width: 18px; height: 18px; stroke: var(--green-leaf); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* On phones the cart lives in the fixed bottom nav — the header cart is
+   redundant there. It stays visible on desktop where there is no bottom nav. */
+@media (max-width: 768px) {
+  .cart-btn { display: none; }
+}
 
 .cart-count {
   background: var(--gold);
@@ -366,22 +433,33 @@ body.lock-scroll { overflow: hidden; }
   letter-spacing: 0.04em;
 }
 
-/* ── PRODUCT GRID ──────────────────────────────────────── */
+/* ── PRODUCT GRID (mobile-first) ────────────────────────────────────────
+   < 480px : 1 column, full-width cards
+   480–768 : 2 columns
+   > 768px : 3 columns (content stays capped at --max-w) */
 .product-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
-  padding: 0 0.75rem;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  padding: 0 1rem;
   margin-bottom: 1.5rem;
 }
 .product-grid-wide {
   grid-template-columns: 1fr;
 }
+@media (min-width: 480px) {
+  .product-grid:not(.product-grid-wide) { grid-template-columns: 1fr 1fr; }
+}
+@media (min-width: 769px) {
+  .product-grid:not(.product-grid-wide) { grid-template-columns: 1fr 1fr 1fr; }
+  .product-grid { gap: 16px; }
+}
 
 .empty {
   text-align: center;
   padding: 2.5rem 1.5rem;
-  color: var(--text-light);
+  /* Sits on the dark animated background — needs a light tone */
+  color: rgba(253, 250, 240, 0.62);
   font-size: 0.85rem;
 }
 .empty .empty-emoji {
@@ -390,5 +468,65 @@ body.lock-scroll { overflow: hidden; }
 }
 
 /* Loading */
-.loading { padding: 2rem; text-align: center; color: var(--text-light); }
+.loading { padding: 2rem; text-align: center; color: rgba(253, 250, 240, 0.62); }
+
+/* ── FIXED BOTTOM NAVIGATION (mobile) ───────────────────────────────────
+   The primary mobile navigation. Sits above page content but below the
+   cart drawer / checkout / modals so focused flows cover it. Hidden on
+   desktop, where the header cart + account menu take over. */
+.bottom-nav {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 70;
+  display: flex;
+  background: rgba(25, 45, 30, 0.86);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: var(--safe-bottom);
+  height: calc(var(--bottom-nav-h) + var(--safe-bottom));
+}
+.bottom-nav[hidden] { display: none; }
+.bn-tab {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: var(--bottom-nav-h);
+  background: transparent;
+  border: none;
+  color: rgba(253, 250, 240, 0.5);
+  transition: color 0.15s, transform 0.1s ease;
+}
+.bn-tab:active { transform: scale(0.92); }
+.bn-tab.active { color: var(--green-leaf); }
+.bn-icon { font-size: 1.25rem; line-height: 1; }
+.bn-label {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+.bn-badge {
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  margin-left: 5px;
+  min-width: 16px; height: 16px;
+  padding: 0 4px;
+  border-radius: 50px;
+  background: var(--gold);
+  color: var(--green-dark);
+  font-size: 9px;
+  font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+}
+.bn-badge[hidden] { display: none; }
+@media (min-width: 769px) {
+  .bottom-nav { display: none; }
+}
 

@@ -11,8 +11,13 @@
   --tilt-x: 0deg;
   --tilt-y: 0deg;
 
-  background: var(--card);
-  border: 1px solid rgba(200, 184, 152, 0.6);
+  /* Frosted-glass card — translucent cream over the animated background.
+     Kept light (not dark) so the dark product text stays readable. */
+  background: rgba(246, 240, 224, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-top-color: rgba(255, 255, 255, 0.18);
   border-radius: var(--radius-md);
   overflow: hidden;
   cursor: pointer;
@@ -141,6 +146,11 @@
   letter-spacing: -0.01em;
   line-height: 1.18;
   margin-bottom: 0.22rem;
+  /* Cap at 2 lines — long names truncate with an ellipsis */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .product-sub {
   font-size: 0.72rem;
@@ -159,10 +169,16 @@
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.04em;
-  min-height: 40px;
-  transition: background 0.15s, transform 0.12s;
+  min-height: 44px;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.32), 0 2px 8px rgba(0,0,0,0.20);
+  transform: translateY(0);
+  transition: background 0.15s, transform 0.1s ease, box-shadow 0.1s ease;
 }
-.product-add-btn:active { transform: scale(0.97); background: var(--green); }
+.product-add-btn:active {
+  background: var(--green);
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.32);
+}
 .notify-btn {
   width: 100%;
   background: transparent;
@@ -173,9 +189,19 @@
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.03em;
-  min-height: 40px;
+  min-height: 44px;
 }
 .notify-btn:active { background: rgba(200,160,56,0.12); }
+
+/* Single-column phones: a 3/4 portrait image would be enormous full-width,
+   so the grid card switches to a softer landscape ratio. */
+@media (max-width: 479px) {
+  .product-grid:not(.product-grid-wide) .product-img-wrap { aspect-ratio: 16 / 10; }
+}
+/* 16px card padding on mobile (A3) */
+@media (max-width: 768px) {
+  .product-info { padding: 1rem; }
+}
 
 /* ── MODAL (bottom sheet) ───────────────────────────────── */
 .modal-backdrop {
@@ -199,6 +225,7 @@
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   max-height: 92dvh;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   padding-bottom: calc(1rem + env(safe-area-inset-bottom));
   box-shadow: var(--shadow-xl);
@@ -310,9 +337,14 @@
 .cta-add-bag {
   background: var(--green-dark);
   color: var(--green-leaf);
-  box-shadow: 0 6px 20px rgba(25,45,30,0.35);
+  box-shadow: 0 4px 0 rgba(0,0,0,0.30), 0 6px 20px rgba(25,45,30,0.35);
+  transform: translateY(0);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
-.cta-add-bag:active { transform: scale(0.98); }
+.cta-add-bag:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.30), 0 4px 12px rgba(25,45,30,0.30);
+}
 .cta-notify {
   background: transparent;
   color: var(--amber);
@@ -365,7 +397,7 @@
 .fdp-bar { height: 6px; background: rgba(20,16,8,0.08); border-radius: 6px; overflow: hidden; }
 .fdp-fill { height: 100%; background: linear-gradient(90deg, var(--gold), var(--amber-light)); transition: width 0.3s; }
 
-.cart-items { flex: 1; overflow-y: auto; padding: 0.6rem 1rem 0.6rem; }
+.cart-items { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0.6rem 1rem 0.6rem; }
 .cart-empty { padding: 4rem 1rem; text-align: center; color: var(--text-light); }
 .cart-empty-icon { font-size: 3rem; margin-bottom: 0.6rem; }
 .cart-empty-text { font-size: 0.95rem; }
@@ -449,10 +481,15 @@
   font-size: 0.95rem;
   font-weight: 700;
   letter-spacing: 0.02em;
-  box-shadow: 0 6px 20px rgba(25,45,30,0.35);
-  min-height: 52px;
+  box-shadow: 0 4px 0 rgba(0,0,0,0.30), 0 6px 20px rgba(25,45,30,0.35);
+  min-height: 56px;
+  transform: translateY(0);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
-.cart-checkout-btn:active { transform: scale(0.98); }
+.cart-checkout-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.30), 0 4px 12px rgba(25,45,30,0.30);
+}
 
 /* ── CHECKOUT SCREEN ───────────────────────────────────── */
 .checkout-screen, .tracking-screen, .success-screen {
@@ -460,6 +497,7 @@
   background: var(--bg);
   z-index: 95;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   transform: translateY(100%);
   transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
@@ -531,9 +569,9 @@
   border: 1.5px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--white);
-  padding: 0.7rem 0.9rem;
+  padding: 0.85rem 0.9rem;
   color: var(--text);
-  min-height: 44px;
+  min-height: 52px;
   font-family: var(--font-body);
 }
 .field textarea { resize: vertical; min-height: 84px; }
@@ -580,7 +618,7 @@
   padding: 0.7rem 0.85rem;
   font-size: 0.85rem;
   font-weight: 600;
-  min-height: 48px;
+  min-height: 56px;
   transition: all 0.15s;
 }
 .pay-option .pay-glyph {
@@ -661,8 +699,19 @@
 }
 
 .checkout-cta-bar {
-  padding: 1.5rem 0 calc(1.5rem + env(safe-area-inset-bottom));
+  padding: 1.5rem 0 calc(1.5rem + var(--safe-bottom));
   display: flex; justify-content: center;
+}
+/* On mobile the Place Order button sticks to the bottom of the form so
+   it is always reachable without scrolling to the end. */
+@media (max-width: 768px) {
+  .checkout-cta-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 6;
+    padding: 1rem 1rem calc(1rem + var(--safe-bottom));
+    background: linear-gradient(to top, var(--bg) 74%, transparent);
+  }
 }
 .place-order-btn {
   width: 100%;
@@ -675,12 +724,17 @@
   font-size: 0.98rem;
   font-weight: 700;
   letter-spacing: 0.02em;
-  box-shadow: 0 6px 20px rgba(25,45,30,0.35);
-  min-height: 52px;
+  box-shadow: 0 4px 0 rgba(0,0,0,0.30), 0 6px 20px rgba(25,45,30,0.35);
+  min-height: 56px;
+  transform: translateY(0);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
   display: flex; align-items: center; justify-content: center; gap: 0.5rem;
 }
 .place-order-btn:disabled { opacity: 0.6; }
-.place-order-btn:active { transform: scale(0.98); }
+.place-order-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.30), 0 4px 12px rgba(25,45,30,0.30);
+}
 
 .btn-primary {
   width: 100%;
@@ -692,10 +746,15 @@
   font-size: 0.9rem;
   font-weight: 700;
   letter-spacing: 0.02em;
-  box-shadow: 0 4px 14px rgba(25,45,30,0.25);
-  min-height: 48px;
+  box-shadow: 0 4px 0 rgba(0,0,0,0.30), 0 4px 14px rgba(25,45,30,0.25);
+  min-height: 56px;
+  transform: translateY(0);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
-.btn-primary:active { transform: scale(0.98); }
+.btn-primary:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.30), 0 3px 10px rgba(25,45,30,0.22);
+}
 .btn-ghost {
   width: 100%;
   background: transparent;
@@ -705,7 +764,7 @@
   padding: 0.8rem 1.2rem;
   font-size: 0.9rem;
   font-weight: 700;
-  min-height: 48px;
+  min-height: 56px;
 }
 
 /* ── SUCCESS SCREEN ────────────────────────────────────── */
@@ -882,7 +941,7 @@
   padding: 0.85rem 1rem;
   font-size: 0.88rem;
   font-weight: 700;
-  min-height: 48px;
+  min-height: 56px;
   display: flex; align-items: center; justify-content: center; gap: 0.5rem;
 }
 
@@ -1062,7 +1121,8 @@ body.modal-open .appFooter {
   font-family: var(--font-display);
   font-size: 1.1rem;
   font-weight: 700;
-  color: var(--text);
+  /* Sits directly on the dark animated background */
+  color: var(--cream);
   padding: 0 1rem 0.75rem;
   margin: 0;
 }
@@ -1257,6 +1317,7 @@ body.modal-open .appFooter {
   box-shadow: var(--shadow-md);
   max-height: 232px;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
 }
 .addr-suggest[hidden] { display: none; }
@@ -1347,3 +1408,36 @@ body.modal-open .appFooter {
   line-height: 1.5;
   margin: 0 0 0.5rem;
 }
+
+/* ── ACCOUNT SHEET (bottom-nav Account tab) ─────────────────────────────
+   A slide-up sheet reusing the .modal-backdrop / .modal-sheet animation. */
+.acct-sheet { padding: 0.3rem 1.2rem calc(1.4rem + var(--safe-bottom)); }
+.acct-title {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0.5rem 0 1rem;
+}
+.acct-item {
+  display: flex; align-items: center; gap: 0.75rem;
+  width: 100%;
+  background: var(--white);
+  border: 1.5px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.6rem;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+  min-height: 56px;
+  text-align: left;
+  transition: background 0.15s;
+}
+.acct-item:active { background: var(--card-hover); }
+.acct-ico { font-size: 1.2rem; line-height: 1; }
+.acct-item-danger { color: var(--danger); }
+
+/* Footer links must stay legible on the dark animated background */
+.footer a { color: var(--green-leaf); font-weight: 600; }

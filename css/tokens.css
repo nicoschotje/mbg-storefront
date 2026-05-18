@@ -53,13 +53,23 @@
   --warning:      #8A6528;
 
   --max-w:        640px;
+
+  /* iPhone notch / home-indicator safe areas — read once, reused everywhere */
+  --safe-top:     env(safe-area-inset-top, 0px);
+  --safe-bottom:  env(safe-area-inset-bottom, 0px);
+  --safe-left:    env(safe-area-inset-left, 0px);
+  --safe-right:   env(safe-area-inset-right, 0px);
+
+  /* Fixed bottom navigation height (excludes the safe-area padding) */
+  --bottom-nav-h: 64px;
 }
 
 * , *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
 body {
   font-family: var(--font-body);
-  background-color: var(--bg);
+  /* Dark base behind the animated gradient (.app-bg) — prevents any flash */
+  background-color: #0d1f12;
   color: var(--text);
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;
@@ -68,9 +78,20 @@ body {
   font-size: 16px;
   line-height: 1.5;
   font-weight: 400;
+  /* Keep content clear of the notch on landscape / curved-edge phones */
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
 }
 img { max-width: 100%; display: block; }
-button { font-family: inherit; cursor: pointer; }
+/* touch-action: manipulation kills the 300ms tap delay on older Android */
+button { font-family: inherit; cursor: pointer; touch-action: manipulation; }
 input, select, textarea { font-family: inherit; font-size: 16px; }
 a { color: var(--green-dark); text-decoration: none; }
+
+/* ── MOBILE TYPOGRAPHY ──────────────────────────────────────────────────
+   Slightly smaller base text + more generous line-height reads better on
+   a phone. Inputs stay 16px (set above) so iOS never zooms on focus. */
+@media (max-width: 768px) {
+  body { font-size: 15px; line-height: 1.6; }
+}
 

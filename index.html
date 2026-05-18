@@ -20,11 +20,17 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,400;1,600;1,700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 
-  <link rel="stylesheet" href="./css/tokens.css?v=20260518-supabase-repoint" />
-  <link rel="stylesheet" href="./css/layout.css?v=20260518-supabase-repoint" />
-  <link rel="stylesheet" href="./css/components.css?v=20260518-features" />
+  <link rel="stylesheet" href="./css/tokens.css?v=20260518-mobile" />
+  <link rel="stylesheet" href="./css/layout.css?v=20260518-mobile" />
+  <link rel="stylesheet" href="./css/components.css?v=20260518-mobile" />
 </head>
 <body>
+
+  <!-- Animated gradient background + floating depth orbs (CSS only) -->
+  <div class="app-bg" aria-hidden="true"></div>
+  <div class="bg-orb bg-orb-1" aria-hidden="true"></div>
+  <div class="bg-orb bg-orb-2" aria-hidden="true"></div>
+  <div class="bg-orb bg-orb-3" aria-hidden="true"></div>
 
   <div class="grain-overlay" aria-hidden="true"></div>
 
@@ -61,7 +67,7 @@
       </label>
       <label class="field">
         <span>PIN</span>
-        <input id="loginPin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="8" placeholder="••••" />
+        <input id="loginPin" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="8" placeholder="••••" />
       </label>
 
       <button id="loginSubmitBtn" class="btn-primary" type="button">Sign in</button>
@@ -138,7 +144,7 @@
   <main class="products-wrap" id="productsWrap" hidden></main>
 
   <!-- ── FOOTER LINKS ─────────────────────────── -->
-  <footer class="footer" id="appFooter" hidden style="text-align:center;padding:1.5rem 1rem 4rem;color:var(--text-light);font-size:0.78rem;line-height:1.6;">
+  <footer class="footer" id="appFooter" hidden style="text-align:center;padding:1.5rem 1rem calc(var(--bottom-nav-h) + var(--safe-bottom) + 1.5rem);color:rgba(253,250,240,0.55);font-size:0.78rem;line-height:1.6;">
     <div style="margin-bottom: 0.5rem;">
       <a href="#" id="openTrackingLink">My Orders</a>
       &nbsp;·&nbsp;
@@ -147,6 +153,23 @@
     <div style="opacity:0.7;">© Mr. Beanie's Greenies. All rights reserved.</div>
   </footer>
 
+  <!-- ── BOTTOM NAVIGATION (mobile) ───────────── -->
+  <nav class="bottom-nav" id="bottomNav" aria-label="Primary" hidden>
+    <button type="button" class="bn-tab active" data-tab="shop" id="bnShopTab">
+      <span class="bn-icon" aria-hidden="true">🏠</span>
+      <span class="bn-label">Shop</span>
+    </button>
+    <button type="button" class="bn-tab" data-tab="cart" id="bnCartTab">
+      <span class="bn-icon" aria-hidden="true">🛒</span>
+      <span class="bn-label">Cart</span>
+      <span class="bn-badge" id="bnCartCount" hidden>0</span>
+    </button>
+    <button type="button" class="bn-tab" data-tab="account" id="bnAccountTab">
+      <span class="bn-icon" aria-hidden="true">👤</span>
+      <span class="bn-label">Account</span>
+    </button>
+  </nav>
+
   <!-- ── CART DRAWER ──────────────────────────── -->
   <aside class="cart-drawer" id="cartDrawer" aria-label="Cart"></aside>
 
@@ -154,26 +177,27 @@
 
   <!-- ── APP SCRIPT ──────────────────────────── -->
   <script type="module">
-    import { sb } from './js/core/supabase.js?v=20260518-supabase-repoint';
-    import { showToast, installPopstateHandler } from './js/core/utils.js?v=20260518-supabase-repoint';
-    import { bindLoginScreen, tryRestoreSession, getSession, getAuthPhone, onAuthChange, logout } from './js/core/auth.js?v=20260518-supabase-repoint';
-    import { loadStoreSettings, loadBanners, loadAnnouncements, renderHero, renderAnnouncements } from './js/modules/banners.js?v=20260518-supabase-repoint';
-    import { loadCategories, loadProducts, renderCategoryNav, renderProductSections, renderFeaturedSection, setSearchQuery, getCategories, getProducts } from './js/modules/products.js?v=20260518-features';
-    import { loadDiscountRules, bindCartTriggers, getCartCount } from './js/modules/cart.js?v=20260518-supabase-repoint';
-    import './js/modules/delivery.js?v=20260518-delivery';
-    import { openCheckoutScreen } from './js/modules/checkout.js?v=20260518-delivery';
-    import './js/modules/address.js?v=20260518-delivery';
-    import { openTrackingScreen } from './js/modules/tracking.js?v=20260518-supabase-repoint';
-    import { loadTier, renderTierBadge } from './js/modules/tiers.js?v=20260518-supabase-repoint';
-    import { renderUserMenu } from './js/modules/usermenu.js?v=20260518-features';
-    import { SW_PATH } from './js/core/config.js?v=20260518-delivery';
+    import { sb } from './js/core/supabase.js?v=20260518-mobile';
+    import { showToast, installPopstateHandler } from './js/core/utils.js?v=20260518-mobile';
+    import { bindLoginScreen, tryRestoreSession, getSession, getAuthPhone, onAuthChange, logout } from './js/core/auth.js?v=20260518-mobile';
+    import { loadStoreSettings, loadBanners, loadAnnouncements, renderHero, renderAnnouncements } from './js/modules/banners.js?v=20260518-mobile';
+    import { loadCategories, loadProducts, renderCategoryNav, renderProductSections, renderFeaturedSection, setSearchQuery, getCategories, getProducts } from './js/modules/products.js?v=20260518-mobile';
+    import { loadDiscountRules, bindCartTriggers, getCartCount, onCartChange } from './js/modules/cart.js?v=20260518-mobile';
+    import { initBottomNav } from './js/modules/bottomnav.js?v=20260518-mobile';
+    import './js/modules/delivery.js?v=20260518-mobile';
+    import { openCheckoutScreen } from './js/modules/checkout.js?v=20260518-mobile';
+    import './js/modules/address.js?v=20260518-mobile';
+    import { openTrackingScreen } from './js/modules/tracking.js?v=20260518-mobile';
+    import { loadTier, renderTierBadge } from './js/modules/tiers.js?v=20260518-mobile';
+    import { renderUserMenu } from './js/modules/usermenu.js?v=20260518-mobile';
+    import { SW_PATH } from './js/core/config.js?v=20260518-mobile';
 
     // ── Boot sequence ─────────────────────────
     installPopstateHandler();
 
     function showApp() {
       document.getElementById('loginScreen').style.display = 'none';
-      ['appHeader','announceBar','heroSection','catNavWrap','productsWrap','appFooter'].forEach(id => {
+      ['appHeader','announceBar','heroSection','catNavWrap','productsWrap','appFooter','bottomNav'].forEach(id => {
         const el = document.getElementById(id); if (el) el.hidden = false;
       });
     }
@@ -229,12 +253,30 @@
         searchInput.focus();
       });
 
-      // Cart wiring
+      // Cart wiring — header cart button + bottom-nav Cart tab share the trigger
       bindCartTriggers({
-        openBtnSel: '#cartBtnHeader',
+        openBtnSel: '#cartBtnHeader, #bnCartTab',
         drawerId: 'cartDrawer',
         countEl: document.getElementById('cartCountHeader')
       });
+
+      // Bottom navigation (mobile)
+      initBottomNav({
+        onShop: () => document.getElementById('productsWrap')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+        onOrders: () => openTrackingScreen(getAuthPhone() || ''),
+        onSignOut: async () => { await logout(); location.reload(); }
+      });
+
+      // Keep the bottom-nav cart badge in sync with cart contents
+      const bnCartCount = document.getElementById('bnCartCount');
+      const syncBnCart = () => {
+        const n = getCartCount();
+        bnCartCount.textContent = String(n);
+        bnCartCount.hidden = n === 0;
+      };
+      onCartChange(syncBnCart);
+      syncBnCart();
 
       // Tier badge
       await loadTier();
