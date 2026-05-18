@@ -22,7 +22,7 @@
 
   <link rel="stylesheet" href="./css/tokens.css?v=20260518-supabase-repoint" />
   <link rel="stylesheet" href="./css/layout.css?v=20260518-supabase-repoint" />
-  <link rel="stylesheet" href="./css/components.css?v=20260518-supabase-repoint" />
+  <link rel="stylesheet" href="./css/components.css?v=20260518-features" />
 </head>
 <body>
 
@@ -87,6 +87,7 @@
       </div>
       <div class="header-right">
         <span id="tierBadge" style="display:none"></span>
+        <span class="user-menu" id="userMenu" hidden></span>
         <button class="cart-btn" id="cartBtnHeader" aria-label="Open cart">
           <svg viewBox="0 0 24 24"><path d="M6 6h15l-1.5 9h-12L5 3H2"/><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/></svg>
           <span>Cart</span>
@@ -157,11 +158,12 @@
     import { showToast, installPopstateHandler } from './js/core/utils.js?v=20260518-supabase-repoint';
     import { bindLoginScreen, tryRestoreSession, getSession, getAuthPhone, onAuthChange, logout } from './js/core/auth.js?v=20260518-supabase-repoint';
     import { loadStoreSettings, loadBanners, loadAnnouncements, renderHero, renderAnnouncements } from './js/modules/banners.js?v=20260518-supabase-repoint';
-    import { loadCategories, loadProducts, renderCategoryNav, renderProductSections, renderFeaturedSection, setSearchQuery, getCategories, getProducts } from './js/modules/products.js?v=20260518-supabase-repoint';
+    import { loadCategories, loadProducts, renderCategoryNav, renderProductSections, renderFeaturedSection, setSearchQuery, getCategories, getProducts } from './js/modules/products.js?v=20260518-features';
     import { loadDiscountRules, bindCartTriggers, getCartCount } from './js/modules/cart.js?v=20260518-supabase-repoint';
     import { openCheckoutScreen } from './js/modules/checkout.js?v=20260518-supabase-repoint';
     import { openTrackingScreen } from './js/modules/tracking.js?v=20260518-supabase-repoint';
     import { loadTier, renderTierBadge } from './js/modules/tiers.js?v=20260518-supabase-repoint';
+    import { renderUserMenu } from './js/modules/usermenu.js?v=20260518-features';
     import { SW_PATH } from './js/core/config.js?v=20260518-supabase-repoint';
 
     // ── Boot sequence ─────────────────────────
@@ -236,6 +238,11 @@
       await loadTier();
       renderTierBadge(document.getElementById('tierBadge'));
 
+      // User badge + account dropdown
+      renderUserMenu(document.getElementById('userMenu'), {
+        onOrders: () => openTrackingScreen(getAuthPhone() || '')
+      });
+
       // Footer hooks
       document.getElementById('openTrackingLink').addEventListener('click', (e) => {
         e.preventDefault(); openTrackingScreen(getAuthPhone() || '');
@@ -298,9 +305,12 @@
       }
     })();
 
-    // Re-render tier badge on auth state change
+    // Re-render tier badge + user menu on auth state change
     onAuthChange(() => {
       renderTierBadge(document.getElementById('tierBadge'));
+      renderUserMenu(document.getElementById('userMenu'), {
+        onOrders: () => openTrackingScreen(getAuthPhone() || '')
+      });
     });
 
     // Network status banner
