@@ -11,3 +11,5 @@ Vanilla JS · ES modules · PWA · Leaflet · Telegram Mini App SDK · Supabase 
 
 ### Deploy
 Push to `main` → Netlify auto-deploys in ~30 seconds.
+
+`SUPABASE_URL` and `SUPABASE_ANON` are defined in `js/core/config.js` and are intentionally committed to the repo — the anon key is public by design and access is enforced by Supabase Row-Level Security. There are no Netlify environment variables for Supabase on this project.
