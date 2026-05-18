@@ -7,7 +7,7 @@ import { EDGE_URL, SUPABASE_ANON, PAYMENT_METHODS } from '../core/config.js';
 import { getStoreSettings } from './banners.js?v=20260518-mobile';
 import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo } from './cart.js?v=20260518-mobile';
 import { getSession, getAuthPhone } from '../core/auth.js';
-import { getSelectedCoords } from './address.js?v=20260518-mobile';
+import { getSelectedCoords } from './address.js?v=20260519-ios';
 import { calculateDelivery } from './delivery.js?v=20260518-mobile';
 
 let _selectedPay = 'gcash';
