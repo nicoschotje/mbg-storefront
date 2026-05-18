@@ -48,12 +48,19 @@ function renderSuggestions(results) {
   if (!field) return;
   if (!results.length) { hideSuggestions(); return; }
   const dd = ensureDropdown(field);
+  const wasHidden = dd.hidden;
   dd.innerHTML = results.slice(0, 6).map(r =>
     `<li class="addr-suggest-item" role="option"
          data-lat="${esc(r.lat)}" data-lon="${esc(r.lon)}"
          data-name="${esc(r.display_name)}">${esc(r.display_name)}</li>`
   ).join('');
   dd.hidden = false;
+  // On iOS the on-screen keyboard can hide the dropdown when the address
+  // field sits low in the form. When the list first appears, bring the
+  // field toward the top so the suggestions below it stay visible.
+  if (wasHidden) {
+    field.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
 }
 
 async function runSearch(query) {
