@@ -4,7 +4,7 @@
  * drop their old cache and pull the latest files. The activate handler
  * below deletes every cache that doesn't match the current version.
  */
-const CACHE_VERSION = 'mbg-storefront-v8';
+const CACHE_VERSION = 'mbg-storefront-v10';
 
 // Install: take over immediately, don't wait for old tabs to close.
 self.addEventListener('install', (event) => {

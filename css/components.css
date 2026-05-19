@@ -857,10 +857,15 @@
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
-.ord-card.status-pending .ord-badge { background: var(--amber); color: var(--white); }
+.ord-card.status-pending .ord-badge { background: #6B6357; color: var(--white); }
+.ord-card.status-confirmed .ord-badge { background: #2A5A8A; color: var(--white); }
+.ord-card.status-preparing .ord-badge { background: var(--amber); color: var(--white); }
+.ord-card.status-out_for_delivery .ord-badge { background: #2A5A8A; color: var(--white); }
 .ord-card.status-cancelled .ord-badge { background: var(--danger); color: var(--white); }
 .ord-card.status-completed .ord-badge { background: var(--success); color: var(--white); }
 .ord-summary { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.4rem; }
+.trk-hint { font-size: 0.8rem; color: var(--text-light); margin: 0 0 0.6rem; }
+.ord-updated { font-size: 0.72rem; color: var(--text-light); margin-top: 0.35rem; }
 .ord-card footer {
   display: flex; justify-content: space-between;
   font-size: 0.78rem;
