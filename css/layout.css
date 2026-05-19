@@ -277,6 +277,7 @@ body.lock-scroll { overflow: hidden; }
   background: rgba(200, 160, 56, 0.18);
   border: 1px solid rgba(200, 160, 56, 0.35);
   backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   color: var(--gold);
   font-size: 0.62rem;
   font-weight: 700;

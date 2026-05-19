@@ -7,10 +7,16 @@ import { EDGE_URL, SUPABASE_ANON, PAYMENT_METHODS } from '../core/config.js';
 import { getStoreSettings } from './banners.js?v=20260518-mobile';
 import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo } from './cart.js?v=20260518-mobile';
 import { getSession, getAuthPhone } from '../core/auth.js';
-import { getSelectedCoords } from './address.js?v=20260518-mobile';
+import { getSelectedCoords } from './address.js?v=20260519-ios';
 import { calculateDelivery } from './delivery.js?v=20260518-mobile';
 
 let _selectedPay = 'gcash';
+
+// Hard ceiling for receipt screenshots — matches the payment-receipts
+// Supabase storage bucket's 5 MB file_size_limit. Checked client-side so
+// an oversized iPhone photo fails fast with a clear message instead of a
+// silent 500 from the upload edge function.
+const MAX_RECEIPT_BYTES = 5 * 1024 * 1024;
 
 export function openCheckoutScreen() {
   const session = getSession();
@@ -336,8 +342,13 @@ async function placeOrder(host) {
 
   const needsReceipt = ['gcash','maya','bank_transfer','usdt'].includes(_selectedPay);
   const receiptInput = host.querySelector('#receiptFile');
-  if (needsReceipt && receiptInput && !receiptInput.files?.[0]) {
+  const receiptFile  = needsReceipt ? receiptInput?.files?.[0] : null;
+  if (needsReceipt && !receiptFile) {
     showToast('Please upload your payment screenshot');
+    return;
+  }
+  if (receiptFile && receiptFile.size > MAX_RECEIPT_BYTES) {
+    showToast('Image too large. Please upload an image under 5 MB.');
     return;
   }
 
@@ -347,9 +358,12 @@ async function placeOrder(host) {
   btn.innerHTML = '<span class="spinner"></span> Placing order…';
 
   try {
+    // Upload the receipt FIRST. If this throws, the catch below surfaces
+    // the error and the order is never placed — the customer retries with
+    // their screenshot intact rather than the order going through blind.
     let receiptUrl = null;
-    if (needsReceipt && receiptInput?.files?.[0]) {
-      receiptUrl = await uploadReceipt(receiptInput.files[0]);
+    if (needsReceipt && receiptFile) {
+      receiptUrl = await uploadReceipt(receiptFile);
     }
 
     const payload = {
@@ -406,8 +420,8 @@ async function placeOrder(host) {
     closeCheckoutScreen();
 
     // Verify receipt in background — badge updates when done
-    if (needsReceipt && receiptInput?.files?.[0]) {
-      verifyReceipt(data.order_number, _selectedPay, receiptInput.files[0])
+    if (needsReceipt && receiptFile) {
+      verifyReceipt(data.order_number, _selectedPay, receiptFile)
         .then(result => updateVerificationBadge(data.order_number, result))
         .catch(() => updateVerificationBadge(data.order_number, { status: 'manual_review' }));
     }
@@ -420,23 +434,40 @@ async function placeOrder(host) {
   }
 }
 
+// Uploads the payment screenshot to the payment-receipts bucket via the
+// upload-receipt edge function and returns its permanent public URL.
+// Throws on any failure — the caller (placeOrder) must NOT place the order
+// without a receipt, so the error propagates to the customer for a retry.
 async function uploadReceipt(file) {
-  // Kept for backward-compat; actual verification now done by verifyReceipt() below.
   const fd = new FormData();
   fd.append('file', file);
+
+  let resp;
   try {
-    const resp = await fetch(`${EDGE_URL}/upload-receipt`, {
+    resp = await fetch(`${EDGE_URL}/upload-receipt`, {
       method: 'POST',
       headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${SUPABASE_ANON}` },
       body: fd
     });
-    if (!resp.ok) throw new Error('Upload failed');
-    const j = await resp.json();
-    return j.url || j.public_url || null;
   } catch(e) {
-    console.warn('[checkout] receipt upload failed, continuing without URL', e);
-    return null;
+    console.error('[checkout] receipt upload network error', e);
+    throw new Error('Could not upload your receipt — check your connection and try again.');
   }
+
+  let j = {};
+  try { j = await resp.json(); } catch(_) {}
+
+  if (!resp.ok || j.error) {
+    console.error('[checkout] receipt upload failed', resp.status, j.error);
+    throw new Error(j.error || `Receipt upload failed (${resp.status}). Please try again.`);
+  }
+
+  const url = j.url || j.public_url || null;
+  if (!url) {
+    console.error('[checkout] receipt upload returned no URL', j);
+    throw new Error('Receipt upload failed — please try again.');
+  }
+  return url;
 }
 // ── Payment verification helpers ────────────────────────────────────────────────
 // Calls the verify-payment Supabase edge function with the screenshot file.
