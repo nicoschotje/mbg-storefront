@@ -59,7 +59,6 @@ export function esc(str) {
 }
 
 // Toast notifications — replaces alert/confirm
-let toastTimer = null;
 export function showToast(msg, kind = 'info', ms = 2600) {
   let host = document.getElementById('toastHost');
   if (!host) {
@@ -68,14 +67,16 @@ export function showToast(msg, kind = 'info', ms = 2600) {
     host.className = 'toast-host';
     document.body.appendChild(host);
   }
+  // Cap visual stacking — drop the oldest toast once 3 are on screen
+  if (host.children.length >= 3) host.firstElementChild?.remove();
   const el = document.createElement('div');
   el.className = `toast toast-${kind}`;
   el.textContent = msg;
   host.appendChild(el);
   // animate in
   requestAnimationFrame(() => el.classList.add('show'));
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => {
+  // Each toast owns its own dismissal timer so stacked toasts dismiss independently
+  const dismiss = setTimeout(() => {
     el.classList.remove('show');
     setTimeout(() => el.remove(), 350);
   }, ms);

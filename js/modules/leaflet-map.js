@@ -13,7 +13,7 @@
  * Leaflet itself is loaded from the jsDelivr CDN in index.html, exposing
  * the global `L`.
  */
-import { getSelectedCoords, applyNominatimAddress } from './address.js?v=20260519-leaflet';
+import { getSelectedCoords, applyNominatimAddress } from './address.js?v=20260520-polish';
 import { getStoreSettings } from './banners.js?v=20260518-mobile';
 
 // Fallback centre (Manila) used only when store coords are missing.

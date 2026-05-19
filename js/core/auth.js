@@ -8,7 +8,7 @@
  */
 
 import { sb, logActivity } from './supabase.js?v=20260518-mobile';
-import { showToast, esc, normalisePhone, isValidPHPhone, bufferToBase64url, base64urlToBuffer, isInAppBrowser } from './utils.js?v=20260518-mobile';
+import { showToast, esc, normalisePhone, isValidPHPhone, bufferToBase64url, base64urlToBuffer, isInAppBrowser } from './utils.js?v=20260520-polish';
 import { LOGIN_FAIL_LIMIT, LOGIN_LOCKOUT_MS, PIN_MIN_LENGTH, PIN_MAX_LENGTH } from './config.js?v=20260518-mobile';
 
 let _session = null;
@@ -117,6 +117,8 @@ export function bindLoginScreen({ phoneInputId, pinInputId, submitBtnId, biometr
       if (pinEl) pinEl.value = '';
 
       onLoggedIn?.(_session);
+      // Persist a remember-me token so a refresh restores the session
+      enableRememberMe().catch(()=>{});
     } catch(e) {
       console.error('[auth] PIN login error', e);
       showErr('Login failed. Please try again.');
@@ -177,6 +179,8 @@ export function bindLoginScreen({ phoneInputId, pinInputId, submitBtnId, biometr
 
       _setSession(authRes, phone);
       onLoggedIn?.(_session);
+      // Persist a remember-me token so a refresh restores the session
+      enableRememberMe().catch(()=>{});
     } catch(e) {
       console.error('[auth] WebAuthn login error', e);
       if (e.name === 'NotAllowedError') {

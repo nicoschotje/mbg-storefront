@@ -8,7 +8,7 @@
  * The #coStreet field is created on demand (and re-rendered) by checkout.js,
  * so this module listens at the document level rather than binding directly.
  */
-import { esc } from '../core/utils.js?v=20260518-mobile';
+import { esc } from '../core/utils.js?v=20260520-polish';
 
 const FIELD_ID = 'coStreet';
 const MIN_CHARS = 3;
@@ -40,8 +40,19 @@ export function applyNominatimAddress(address, displayName) {
   set('coStreet',   street);
   set('coBarangay', a.suburb || a.neighbourhood || a.village || a.quarter);
   set('coCity',     a.city || a.town || a.municipality);
-  set('coProvince', a.state);
-  set('coPostal',   a.postcode);
+
+  // PH Nominatim often files the province under state_district/region/county.
+  const province = a.state || a.state_district || a.region || a.county || '';
+  set('coProvince', province);
+
+  // Postcode: prefer structured field, then scrape a 4-digit code from
+  // the display_name (PH ZIPs are 4 digits, often appear like "Makati 1220").
+  let postcode = a.postcode || '';
+  if (!postcode && displayName) {
+    const m = displayName.match(/\b\d{4}\b/);
+    if (m) postcode = m[0];
+  }
+  set('coPostal', postcode);
 }
 
 function getField() {
