@@ -7,7 +7,8 @@ import { EDGE_URL, SUPABASE_ANON, PAYMENT_METHODS } from '../core/config.js';
 import { getStoreSettings } from './banners.js?v=20260518-mobile';
 import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo } from './cart.js?v=20260518-mobile';
 import { getSession, getAuthPhone } from '../core/auth.js';
-import { getSelectedCoords } from './address.js?v=20260519-ios';
+import { getSelectedCoords } from './address.js?v=20260519-leaflet';
+import { initAddressMap } from './leaflet-map.js?v=20260519-leaflet';
 import { calculateDelivery } from './delivery.js?v=20260518-mobile';
 
 let _selectedPay = 'gcash';
@@ -108,17 +109,25 @@ function renderCheckout(host, session) {
   // A re-render rebuilds every field — preserve whatever the customer has
   // already typed (the delivery address in particular must survive).
   const prev = {
-    name:  host.querySelector('#coName')?.value,
-    phone: host.querySelector('#coPhone')?.value,
-    addr:  host.querySelector('#coAddr')?.value,
-    notes: host.querySelector('#coNotes')?.value,
-    promo: host.querySelector('#coPromo')?.value
+    name:     host.querySelector('#coName')?.value,
+    phone:    host.querySelector('#coPhone')?.value,
+    street:   host.querySelector('#coStreet')?.value,
+    barangay: host.querySelector('#coBarangay')?.value,
+    city:     host.querySelector('#coCity')?.value,
+    province: host.querySelector('#coProvince')?.value,
+    postal:   host.querySelector('#coPostal')?.value,
+    notes:    host.querySelector('#coNotes')?.value,
+    promo:    host.querySelector('#coPromo')?.value
   };
-  const valName  = prev.name  !== undefined ? prev.name  : (session?.display_name || '');
-  const valPhone = prev.phone !== undefined ? prev.phone : (getAuthPhone() || session?.phone || '');
-  const valAddr  = prev.addr  !== undefined ? prev.addr  : (session?.saved_address || '');
-  const valNotes = prev.notes !== undefined ? prev.notes : '';
-  const valPromo = prev.promo !== undefined ? prev.promo : (getAppliedPromo() || '');
+  const valName     = prev.name     !== undefined ? prev.name     : (session?.display_name || '');
+  const valPhone    = prev.phone    !== undefined ? prev.phone    : (getAuthPhone() || session?.phone || '');
+  const valStreet   = prev.street   !== undefined ? prev.street   : (session?.saved_address || '');
+  const valBarangay = prev.barangay !== undefined ? prev.barangay : '';
+  const valCity     = prev.city     !== undefined ? prev.city     : '';
+  const valProvince = prev.province !== undefined ? prev.province : '';
+  const valPostal   = prev.postal   !== undefined ? prev.postal   : '';
+  const valNotes    = prev.notes    !== undefined ? prev.notes    : '';
+  const valPromo    = prev.promo    !== undefined ? prev.promo    : (getAppliedPromo() || '');
 
   const delivery = computeDelivery(ss, subtotal);
   const total = Math.max(0, subtotal + delivery.fee - disc.amount);
@@ -146,9 +155,31 @@ function renderCheckout(host, session) {
           <input id="coPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+63 9XX XXX XXXX" value="${esc(valPhone)}">
         </label>
         <label class="field">
-          <span>Complete delivery address</span>
-          <textarea id="coAddr" rows="3" placeholder="House/Unit, Street, Barangay, City">${esc(valAddr)}</textarea>
+          <span>Street / Building</span>
+          <input id="coStreet" type="text" inputmode="text" autocomplete="street-address" placeholder="House/Unit, Street" value="${esc(valStreet)}">
         </label>
+        <label class="field">
+          <span>Barangay</span>
+          <input id="coBarangay" type="text" inputmode="text" autocomplete="address-level3" placeholder="Barangay" value="${esc(valBarangay)}">
+        </label>
+        <div class="field-row">
+          <label class="field">
+            <span>City / Municipality</span>
+            <input id="coCity" type="text" inputmode="text" autocomplete="address-level2" placeholder="City" value="${esc(valCity)}">
+          </label>
+          <label class="field">
+            <span>Province</span>
+            <input id="coProvince" type="text" inputmode="text" autocomplete="address-level1" placeholder="Province" value="${esc(valProvince)}">
+          </label>
+        </div>
+        <label class="field field-half">
+          <span>Postal code (optional)</span>
+          <input id="coPostal" type="text" inputmode="numeric" autocomplete="postal-code" placeholder="1605" value="${esc(valPostal)}">
+        </label>
+        <div class="address-map-wrap">
+          <div id="addr-map" class="address-map"></div>
+          <p class="map-caption">Drag the pin to adjust if the location is off</p>
+        </div>
         <label class="field">
           <span>Delivery notes (optional)</span>
           <input id="coNotes" type="text" placeholder="Landmarks, gate code, etc." value="${esc(valNotes)}">
@@ -207,6 +238,7 @@ function renderCheckout(host, session) {
   renderPayInfo(host.querySelector('#payInfoBox'), _selectedPay, total);
 
   host.querySelector('#placeOrderBtn')?.addEventListener('click', () => placeOrder(host));
+  initAddressMap();
   refreshDelivery(host);
 }
 
@@ -320,15 +352,26 @@ async function fetchUSDTPHPRate(box) {
 }
 
 async function placeOrder(host) {
-  const name  = host.querySelector('#coName').value.trim();
-  const phone = normalisePhone(host.querySelector('#coPhone').value.trim() || getAuthPhone() || '');
-  const addr  = host.querySelector('#coAddr').value.trim();
-  const notes = host.querySelector('#coNotes').value.trim();
-  const promo = host.querySelector('#coPromo').value.trim().toUpperCase() || null;
+  const name     = host.querySelector('#coName').value.trim();
+  const phone    = normalisePhone(host.querySelector('#coPhone').value.trim() || getAuthPhone() || '');
+  const street   = host.querySelector('#coStreet').value.trim();
+  const barangay = host.querySelector('#coBarangay').value.trim();
+  const city     = host.querySelector('#coCity').value.trim();
+  const province = host.querySelector('#coProvince').value.trim();
+  const postal   = host.querySelector('#coPostal').value.trim();
+  const notes    = host.querySelector('#coNotes').value.trim();
+  const promo    = host.querySelector('#coPromo').value.trim().toUpperCase() || null;
 
   if (!name)  { showToast('Please enter your name'); return; }
   if (!isValidPHPhone(phone)) { showToast('Enter a valid PH mobile number'); return; }
-  if (!addr || addr.length < 10) { showToast('Please enter a complete delivery address'); return; }
+  if (!street)   { showToast('Please enter your street / building'); return; }
+  if (!barangay) { showToast('Please enter your barangay'); return; }
+  if (!city)     { showToast('Please enter your city / municipality'); return; }
+  if (!province) { showToast('Please enter your province'); return; }
+
+  // The five structured fields collapse into the existing delivery_address
+  // column — the orders schema is unchanged.
+  const addr = `${street}, ${barangay}, ${city}, ${province}${postal ? ' ' + postal : ''}`;
 
   const items = getCartItems();
   if (!items.length) { showToast('Your bag is empty'); return; }
