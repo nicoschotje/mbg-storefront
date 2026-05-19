@@ -20,6 +20,9 @@ export function initBottomNav(callbacks = {}) {
 function onTab(name) {
   if (name === 'shop') {
     _cb.onShop?.();
+  } else if (name === 'orders') {
+    if (!getSession()) { showToast('Sign in to view your orders'); return; }
+    _cb.onOrders?.();
   } else if (name === 'account') {
     if (!getSession()) { showToast('Sign in to view your account'); return; }
     openAccountSheet();
