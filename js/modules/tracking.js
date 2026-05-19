@@ -1,5 +1,6 @@
 /* MBG Storefront v2 — Order Tracking */
-import { sb } from '../core/supabase.js';
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+import { SUPABASE_URL, SUPABASE_ANON } from '../core/config.js';
 import { esc, formatPrice, normalisePhone, isValidPHPhone, openOverlay, closeOverlay, parseItems, timeAgo, showToast } from '../core/utils.js';
 import { getAuthPhone } from '../core/auth.js';
 
@@ -11,6 +12,25 @@ const STATUS_LABELS = {
 
 let _channel = null;
 let _orders = [];
+
+// Order lookups run against RLS policy orders_anon_select_own, which requires
+// the customer's phone in an x-customer-phone request header. The shared sb()
+// client does not set it, so tracking builds its own client scoped to the
+// phone once it is known — used for both the REST SELECT and Realtime.
+let _scoped = null;
+let _scopedPhone = null;
+
+function scopedClient(phone) {
+  if (_scoped && _scopedPhone === phone) return _scoped;
+  if (_scoped) { try { _scoped.removeAllChannels(); } catch(_) {} }
+  _scoped = createClient(SUPABASE_URL, SUPABASE_ANON, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    realtime: { params: { eventsPerSecond: 5 } },
+    global: { headers: { 'x-customer-phone': phone } }
+  });
+  _scopedPhone = phone;
+  return _scoped;
+}
 
 export function openTrackingScreen(initialPhone) {
   let host = document.getElementById('trackingScreen');
@@ -37,7 +57,8 @@ export function closeTrackingScreen() {
   host.classList.remove('open');
   document.body.classList.remove('lock-scroll');
   closeOverlay('trackingScreen');
-  if (_channel) { try { sb().removeChannel(_channel); } catch(_) {} _channel = null; }
+  if (_channel && _scoped) { try { _scoped.removeChannel(_channel); } catch(_) {} }
+  _channel = null;
 }
 
 function renderShell(host, phone) {
@@ -75,7 +96,8 @@ async function loadOrders(host, phone) {
   if (!list) return;
   list.innerHTML = `<div class="loading">Looking up your orders…</div>`;
   try {
-    const { data, error } = await sb().from('orders')
+    const client = scopedClient(phone);
+    const { data, error } = await client.from('orders')
       .select('*')
       .or(`customer_phone.eq.${phone},contact.eq.${phone}`)
       .order('created_at', { ascending: false })
@@ -91,8 +113,9 @@ async function loadOrders(host, phone) {
 }
 
 function subscribeToOrders(phone, list) {
-  if (_channel) { try { sb().removeChannel(_channel); } catch(_) {} _channel = null; }
-  _channel = sb().channel('mbg-tracking')
+  const client = scopedClient(phone);
+  if (_channel) { try { client.removeChannel(_channel); } catch(_) {} _channel = null; }
+  _channel = client.channel('mbg-tracking')
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload) => {
       const upd = payload.new;
       if (!upd) return;
