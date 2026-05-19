@@ -458,7 +458,7 @@ async function placeOrder(host) {
     });
 
     // Show success screen immediately with a "pending" verification badge
-    showSuccessScreen(data.order_number, items, total);
+    showSuccessScreen(data.order_number, items, total, phone);
     clearCart();
     closeCheckoutScreen();
 
@@ -550,7 +550,7 @@ function updateVerificationBadge(orderNum, result) {
 
 
 // ── Success screen ──────────────────────────────────────────
-export function showSuccessScreen(orderNum, items, total) {
+export function showSuccessScreen(orderNum, items, total, phone) {
   let host = document.getElementById('successScreen');
   if (!host) {
     host = document.createElement('section');
@@ -582,7 +582,8 @@ export function showSuccessScreen(orderNum, items, total) {
   host.querySelector('#successTrack')?.addEventListener('click', () => {
     host.classList.remove('open');
     closeOverlay('successScreen');
-    document.dispatchEvent(new CustomEvent('mbg:openTracking'));
+    // Hand off the just-placed order's phone so My Orders skips the gate.
+    document.dispatchEvent(new CustomEvent('mbg:openTracking', { detail: { phone } }));
   });
 }
 

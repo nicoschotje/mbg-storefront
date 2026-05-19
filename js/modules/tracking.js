@@ -3,9 +3,10 @@ import { sb } from '../core/supabase.js';
 import { esc, formatPrice, normalisePhone, isValidPHPhone, openOverlay, closeOverlay, parseItems, timeAgo, showToast } from '../core/utils.js';
 import { getAuthPhone } from '../core/auth.js';
 
+// Friendly, customer-facing labels for the dashboard's order_status values.
 const STATUS_LABELS = {
-  pending:'Pending', confirmed:'Confirmed', preparing:'Preparing',
-  out_for_delivery:'On the way', completed:'Delivered', cancelled:'Cancelled'
+  pending:'Order received', confirmed:'Confirmed', preparing:'Preparing your order',
+  out_for_delivery:'Out for delivery', completed:'Delivered', cancelled:'Cancelled'
 };
 
 let _channel = null;
@@ -19,14 +20,15 @@ export function openTrackingScreen(initialPhone) {
     host.className = 'tracking-screen';
     document.body.appendChild(host);
   }
-  renderShell(host, initialPhone || getAuthPhone() || '');
+  // The logged-in identity always wins over a passed-in phone (Path B > Path A).
+  const knownPhone = getAuthPhone() || initialPhone || '';
+  renderShell(host, knownPhone);
   host.classList.add('open');
   document.body.classList.add('lock-scroll');
   openOverlay('trackingScreen', () => closeTrackingScreen());
 
-  // Auto-load if we already have a phone
-  const phone = initialPhone || getAuthPhone();
-  if (phone) loadOrders(host, phone);
+  // Phone already known (logged-in or post-checkout handoff) — skip the gate.
+  if (knownPhone) loadOrders(host, normalisePhone(knownPhone));
 }
 
 export function closeTrackingScreen() {
@@ -39,6 +41,9 @@ export function closeTrackingScreen() {
 }
 
 function renderShell(host, phone) {
+  // Gate is shown only for anonymous lookups (Path C). When the phone is
+  // already known the orders list renders immediately with a loading state.
+  const gated = !phone;
   host.innerHTML = `
     <div class="tracking-inner">
       <header class="checkout-header">
@@ -46,14 +51,16 @@ function renderShell(host, phone) {
         <h2>My Orders</h2>
         <span class="checkout-spacer"></span>
       </header>
+      ${gated ? `
       <section class="check-section">
+        <p class="trk-hint">Enter the phone number you used at checkout.</p>
         <label class="field">
           <span>Phone number</span>
-          <input id="trkPhone" type="tel" inputmode="tel" placeholder="+63 9XX XXX XXXX" value="${esc(phone)}"/>
+          <input id="trkPhone" type="tel" inputmode="tel" placeholder="+63 9XX XXX XXXX"/>
         </label>
         <button id="trkLookup" class="btn-primary" type="button">Find my orders</button>
-      </section>
-      <div id="trkResults" class="trk-results"></div>
+      </section>` : ''}
+      <div id="trkResults" class="trk-results">${gated ? '' : '<div class="loading">Looking up your orders…</div>'}</div>
     </div>`;
   host.querySelector('.checkout-back')?.addEventListener('click', closeTrackingScreen);
   host.querySelector('#trkLookup')?.addEventListener('click', () => {
@@ -112,7 +119,9 @@ function renderOrders(list, orders) {
       ? items.slice(0,2).map(i => `${i.emoji||'🌿'} ${i.name||''} ×${i.qty||i.quantity||1}`).join(', ') +
         (items.length > 2 ? `, +${items.length-2} more` : '')
       : '—';
+    // order_status is the source of truth (kept in sync by a DB trigger).
     const status = o.order_status || 'pending';
+    const updatedTs = o.status_updated_at || o.created_at;
     return `<article class="ord-card status-${esc(status)}">
       <header>
         <span class="ord-num">#${esc(o.order_number || o.id.slice(0,8))}</span>
@@ -123,10 +132,10 @@ function renderOrders(list, orders) {
         <span class="ord-total">${esc(formatPrice(o.total||0))}</span>
         <span class="ord-time">${esc(timeAgo(o.created_at))}</span>
       </footer>
+      <div class="ord-updated">Updated ${esc(timeAgo(updatedTs))}</div>
       <div class="ord-addr">${esc(o.delivery_address || '')}</div>
     </article>`;
   }).join('');
 }
 
-document.addEventListener('mbg:openTracking', () => openTrackingScreen());
-
+document.addEventListener('mbg:openTracking', (e) => openTrackingScreen(e?.detail?.phone));
