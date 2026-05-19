@@ -171,6 +171,10 @@
       <span class="bn-label">Cart</span>
       <span class="bn-badge" id="bnCartCount" hidden>0</span>
     </button>
+    <button type="button" class="bn-tab" data-tab="orders" id="bnOrdersTab">
+      <span class="bn-icon" aria-hidden="true">📦</span>
+      <span class="bn-label">Orders</span>
+    </button>
     <button type="button" class="bn-tab" data-tab="account" id="bnAccountTab">
       <span class="bn-icon" aria-hidden="true">👤</span>
       <span class="bn-label">Account</span>
@@ -190,7 +194,7 @@
     import { loadStoreSettings, loadBanners, loadAnnouncements, renderHero, renderAnnouncements } from './js/modules/banners.js?v=20260518-mobile';
     import { loadCategories, loadProducts, renderCategoryNav, renderProductSections, renderFeaturedSection, setSearchQuery, getCategories, getProducts } from './js/modules/products.js?v=20260518-mobile';
     import { loadDiscountRules, bindCartTriggers, getCartCount, onCartChange } from './js/modules/cart.js?v=20260518-mobile';
-    import { initBottomNav } from './js/modules/bottomnav.js?v=20260518-mobile';
+    import { initBottomNav } from './js/modules/bottomnav.js?v=20260519-orders-tab';
     import './js/modules/delivery.js?v=20260518-mobile';
     import { openCheckoutScreen } from './js/modules/checkout.js?v=20260519-tracking';
     import './js/modules/address.js?v=20260519-leaflet';
