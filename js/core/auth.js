@@ -117,6 +117,8 @@ export function bindLoginScreen({ phoneInputId, pinInputId, submitBtnId, biometr
       if (pinEl) pinEl.value = '';
 
       onLoggedIn?.(_session);
+      // Persist a remember-me token so a refresh restores the session
+      enableRememberMe().catch(()=>{});
     } catch(e) {
       console.error('[auth] PIN login error', e);
       showErr('Login failed. Please try again.');
@@ -177,6 +179,8 @@ export function bindLoginScreen({ phoneInputId, pinInputId, submitBtnId, biometr
 
       _setSession(authRes, phone);
       onLoggedIn?.(_session);
+      // Persist a remember-me token so a refresh restores the session
+      enableRememberMe().catch(()=>{});
     } catch(e) {
       console.error('[auth] WebAuthn login error', e);
       if (e.name === 'NotAllowedError') {
