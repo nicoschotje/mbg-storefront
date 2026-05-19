@@ -1,14 +1,25 @@
-/* MBG Storefront v2 — Nominatim delivery-address autocomplete
- * Philippines-only address suggestions for the checkout address field.
- * On selection it stores the suggestion's coordinates so checkout can
- * include them in the place-order payload and feed the distance-based
- * delivery calculator. A `mbg:deliveryAddrChanged` event is dispatched
- * whenever the coordinates are picked or cleared so checkout can re-quote.
+/* MBG Storefront v2 — delivery-address autocomplete
+ *
+ * Primary path: Google Places (New) PlaceAutocompleteElement, restricted
+ * to the Philippines. Fallback path: Nominatim (OpenStreetMap) typeahead.
+ *
+ * On init the module tries to load the Google Maps JS API. If that
+ * succeeds the #coAddr textarea is silently enhanced with a Google
+ * PlaceAutocompleteElement. If it fails (network error, missing key,
+ * timeout — e.g. on deploy previews where the key's domain restriction
+ * blocks loading) the module falls through to the existing Nominatim
+ * implementation. The customer never sees an error either way.
+ *
+ * Downstream contract — unchanged regardless of which path runs:
+ *   - getSelectedCoords() returns { lat, lng } or null
+ *   - a bare `mbg:deliveryAddrChanged` CustomEvent fires whenever the
+ *     coordinates are picked or cleared
  *
  * The #coAddr field is created on demand (and re-rendered) by checkout.js,
  * so this module listens at the document level rather than binding directly.
  */
 import { esc } from '../core/utils.js?v=20260518-mobile';
+import { loadGoogleMaps } from './gmaps-loader.js?v=20260519-gplaces';
 
 const FIELD_ID = 'coAddr';
 const MIN_CHARS = 3;
@@ -26,6 +37,12 @@ export function getSelectedCoords() {
 function getField() {
   return document.getElementById(FIELD_ID);
 }
+
+function emitChanged() {
+  document.dispatchEvent(new CustomEvent('mbg:deliveryAddrChanged'));
+}
+
+/* ───────────────────────── Nominatim fallback ───────────────────────── */
 
 // Rebuilds the dropdown if checkout re-rendered (which wipes the old node).
 function ensureDropdown(field) {
@@ -95,11 +112,13 @@ function scheduleSearch(query) {
 }
 
 // Customer typing in the address field — schedule a debounced lookup.
+// When the Google path is active the textarea is hidden, so this only
+// fires on the Nominatim fallback path.
 document.addEventListener('input', (e) => {
   if (e.target?.id !== FIELD_ID) return;
   // A manual edit invalidates the coordinates of any earlier selection.
   _selectedCoords = null;
-  document.dispatchEvent(new CustomEvent('mbg:deliveryAddrChanged'));
+  emitChanged();
   const q = e.target.value.trim();
   _activeQuery = q;
   if (q.length < MIN_CHARS) {
@@ -123,10 +142,105 @@ document.addEventListener('click', (e) => {
       : null;
     _activeQuery = field ? field.value.trim() : '';
     hideSuggestions();
-    document.dispatchEvent(new CustomEvent('mbg:deliveryAddrChanged'));
+    emitChanged();
     return;
   }
   if (e.target?.id !== FIELD_ID && !e.target.closest?.('.addr-suggest')) {
     hideSuggestions();
   }
 });
+
+/* ─────────────────────── Google Places (primary) ────────────────────── */
+
+let _gmaps = null;
+let _placeEl = null;
+
+// Pulls a numeric { lat, lng } out of whichever shape the Places API
+// returns — the New API exposes place.location, older shapes nest it
+// under place.geometry.location. Both expose lat/lng as either numbers
+// or accessor functions.
+function coordsFromPlace(place) {
+  const loc = place?.location || place?.geometry?.location;
+  if (!loc) return null;
+  const lat = typeof loc.lat === 'function' ? loc.lat() : loc.lat;
+  const lng = typeof loc.lng === 'function' ? loc.lng() : loc.lng;
+  return (Number.isFinite(lat) && Number.isFinite(lng)) ? { lat, lng } : null;
+}
+
+async function onGooglePlaceSelect(e) {
+  try {
+    const prediction = e.placePrediction;
+    if (!prediction) return;
+    const place = prediction.toPlace();
+    await place.fetchFields({ fields: ['location', 'formattedAddress'] });
+    const field = getField();
+    if (field && place.formattedAddress) field.value = place.formattedAddress;
+    _selectedCoords = coordsFromPlace(place);
+    _activeQuery = field ? field.value.trim() : '';
+  } catch (err) {
+    console.warn('[address] Google place fetch failed', err);
+    _selectedCoords = null;
+  }
+  emitChanged();
+}
+
+// Typing in the Google element invalidates any earlier selection and is
+// mirrored back into the (hidden) #coAddr textarea so checkout.js still
+// reads the address text from its existing selector.
+function onGoogleInput(e) {
+  const inner = e.composedPath?.()[0];
+  const field = getField();
+  if (field && inner && typeof inner.value === 'string') {
+    field.value = inner.value;
+  }
+  _selectedCoords = null;
+  emitChanged();
+}
+
+// Inserts a Google PlaceAutocompleteElement next to #coAddr and hides the
+// plain textarea. Re-runs after checkout re-renders (which disconnects the
+// previous element). Cheap to call repeatedly — early-returns when live.
+function enhanceWithGoogle() {
+  if (!_gmaps) return;
+  const field = getField();
+  if (!field) return;
+  if (_placeEl && _placeEl.isConnected) return;
+
+  let el;
+  try {
+    el = new _gmaps.places.PlaceAutocompleteElement({
+      includedRegionCodes: ['ph'],
+    });
+  } catch (err) {
+    // Construction failed — leave the textarea visible so the Nominatim
+    // path keeps working. Never surface an error to the customer.
+    console.warn('[address] PlaceAutocompleteElement unavailable', err);
+    _gmaps = null;
+    return;
+  }
+
+  el.className = 'addr-gplaces';
+  el.style.width = '100%';
+  hideSuggestions();
+  field.style.display = 'none';
+  field.insertAdjacentElement('afterend', el);
+  el.addEventListener('gmp-select', onGooglePlaceSelect);
+  el.addEventListener('input', onGoogleInput);
+  _placeEl = el;
+}
+
+(function initGoogle() {
+  loadGoogleMaps()
+    .then((maps) => {
+      _gmaps = maps;
+      enhanceWithGoogle();
+      // #coAddr is created/re-rendered on demand by checkout.js — re-enhance
+      // whenever it reappears in the DOM.
+      const observer = new MutationObserver(() => enhanceWithGoogle());
+      observer.observe(document.body, { childList: true, subtree: true });
+    })
+    .catch((err) => {
+      // Silent fallback — the Nominatim path above stays in effect.
+      console.warn('[address] Google Maps unavailable, using Nominatim', err);
+    });
+})();
