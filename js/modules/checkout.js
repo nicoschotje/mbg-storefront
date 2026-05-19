@@ -132,9 +132,21 @@ function renderCheckout(host, session) {
   const delivery = computeDelivery(ss, subtotal);
   const total = Math.max(0, subtotal + delivery.fee - disc.amount);
 
-  // Filter pay methods — hide USDT if not enabled
+  // Filter pay methods — hide USDT if not enabled, and hide GCash/Maya
+  // when the dashboard has disabled them via store_settings flags.
   const cryptoOn = !!(ss?.crypto_enabled && ss?.crypto_usdt_address);
-  const pays = PAYMENT_METHODS.filter(p => p.id !== 'usdt' || cryptoOn);
+  const pays = PAYMENT_METHODS.filter(p => {
+    if (p.id === 'usdt')  return cryptoOn;
+    if (p.id === 'gcash') return ss?.gcash_enabled === true;
+    if (p.id === 'maya')  return ss?.maya_enabled === true;
+    return true;
+  });
+
+  // If the previously selected method was just filtered out, fall back to
+  // the first still-available option so the UI and payInfo box stay in sync.
+  if (!pays.some(p => p.id === _selectedPay) && pays.length) {
+    _selectedPay = pays[0].id;
+  }
 
   host.innerHTML = `
     <div class="checkout-inner">
