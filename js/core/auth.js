@@ -8,7 +8,7 @@
  */
 
 import { sb, logActivity } from './supabase.js?v=20260518-mobile';
-import { showToast, esc, normalisePhone, isValidPHPhone, bufferToBase64url, base64urlToBuffer, isInAppBrowser } from './utils.js?v=20260518-mobile';
+import { showToast, esc, normalisePhone, isValidPHPhone, bufferToBase64url, base64urlToBuffer, isInAppBrowser } from './utils.js?v=20260520-polish';
 import { LOGIN_FAIL_LIMIT, LOGIN_LOCKOUT_MS, PIN_MIN_LENGTH, PIN_MAX_LENGTH } from './config.js?v=20260518-mobile';
 
 let _session = null;

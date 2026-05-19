@@ -3,8 +3,8 @@
  * badge. Tapping it opens a menu with two actions: My Orders + Sign Out.
  * Reads the existing auth session — it never makes its own Supabase call.
  */
-import { esc } from '../core/utils.js?v=20260518-mobile';
-import { getSession, getAuthPhone, logout } from '../core/auth.js?v=20260518-mobile';
+import { esc } from '../core/utils.js?v=20260520-polish';
+import { getSession, getAuthPhone, logout } from '../core/auth.js?v=20260520-polish';
 
 let _menuEl = null;
 let _globalsBound = false;

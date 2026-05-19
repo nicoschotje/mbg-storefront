@@ -8,7 +8,7 @@
  * The #coStreet field is created on demand (and re-rendered) by checkout.js,
  * so this module listens at the document level rather than binding directly.
  */
-import { esc } from '../core/utils.js?v=20260518-mobile';
+import { esc } from '../core/utils.js?v=20260520-polish';
 
 const FIELD_ID = 'coStreet';
 const MIN_CHARS = 3;

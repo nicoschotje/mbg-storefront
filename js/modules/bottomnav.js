@@ -3,8 +3,8 @@
  * cart trigger (see bindCartTriggers in cart.js); this module wires the
  * Shop scroll-to-grid and the Account slide-up sheet.
  */
-import { openOverlay, closeOverlay, showToast } from '../core/utils.js?v=20260518-mobile';
-import { getSession } from '../core/auth.js?v=20260518-mobile';
+import { openOverlay, closeOverlay, showToast } from '../core/utils.js?v=20260520-polish';
+import { getSession } from '../core/auth.js?v=20260520-polish';
 
 let _cb = {};
 
