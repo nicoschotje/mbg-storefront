@@ -14,6 +14,11 @@
     Content-Security-Policy   = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://mrbeanisgreenies.com https://www.mrbeanisgreenies.com https://*.supabase.co wss://*.supabase.co https://api.telegram.org https://api.coingecko.com https://nominatim.openstreetmap.org https://*.tile.openstreetmap.org; frame-ancestors 'self' https://web.telegram.org; base-uri 'self'; form-action 'self'"
 
 [[redirects]]
+  from = "/env.js"
+  to = "/.netlify/functions/env"
+  status = 200
+
+[[redirects]]
   from   = "/*"
   to     = "/index.html"
   status = 200
