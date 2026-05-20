@@ -24,7 +24,12 @@ export function getAppliedPromo() { return _appliedPromo; }
 
 export function freeDeliveryThreshold() {
   const ss = getStoreSettings();
-  return Number(ss?.free_delivery_threshold) || DEFAULT_FREE_DELIVERY_THRESHOLD;
+  return Number(ss?.free_delivery_min) || DEFAULT_FREE_DELIVERY_THRESHOLD;
+}
+
+export function freeDeliveryEnabled() {
+  const ss = getStoreSettings();
+  return ss?.free_delivery_enabled !== false; // default ON if column missing/null
 }
 
 export function getSubtotal() {
@@ -147,9 +152,10 @@ function renderCartDrawer(drawer) {
   const items    = getCartItems();
   const subtotal = getSubtotal();
   const disc     = getDiscount();
-  const fdt      = freeDeliveryThreshold();
+  const fdEnabled = freeDeliveryEnabled();
+  const fdt       = freeDeliveryThreshold();
   const remaining = Math.max(0, fdt - subtotal);
-  const pct = fdt > 0 ? Math.min(100, (subtotal / fdt) * 100) : 0;
+  const pct       = fdt > 0 ? Math.min(100, (subtotal / fdt) * 100) : 0;
 
   drawer.innerHTML = `
     <div class="cart-panel">
@@ -158,12 +164,13 @@ function renderCartDrawer(drawer) {
         <button class="cart-close" aria-label="Close">×</button>
       </div>
 
-      <div class="free-deliv-progress">
-        <div class="fdp-text">${remaining > 0
-          ? `Add <b>${esc(formatPrice(remaining))}</b> more for <b>free delivery</b>`
-          : `<b>You&rsquo;ve unlocked free delivery</b>`}</div>
-        <div class="fdp-bar"><div class="fdp-fill" style="width:${pct}%"></div></div>
-      </div>
+      ${fdEnabled ? `
+<div class="free-deliv-progress">
+  <div class="fdp-text">${remaining > 0
+    ? `Add <b>${esc(formatPrice(remaining))}</b> more for <b>free delivery</b>`
+    : `<b>You&rsquo;ve unlocked free delivery</b>`}</div>
+  <div class="fdp-bar"><div class="fdp-fill" style="width:${pct}%"></div></div>
+</div>` : ''}
 
       <div class="cart-items">
         ${items.length === 0
