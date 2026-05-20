@@ -65,14 +65,22 @@
 }
 
 * , *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  /* iOS Safari pull-to-refresh reloads the page and wipes the in-memory
+     cart — set contain on the root so the overscroll never bubbles up
+     to the browser's native gesture. Paired with the same rule on body. */
+  overscroll-behavior-y: contain;
+}
 body {
   font-family: var(--font-body);
   /* Dark base behind the animated gradient (.app-bg) — prevents any flash */
   background-color: #0d1f12;
   color: var(--text);
   -webkit-tap-highlight-color: transparent;
-  overscroll-behavior-y: none;
+  /* Prevents iOS Safari pull-to-refresh from wiping cart on overscroll. */
+  overscroll-behavior-y: contain;
   overflow-x: hidden;
   min-height: 100dvh;
   font-size: 16px;
