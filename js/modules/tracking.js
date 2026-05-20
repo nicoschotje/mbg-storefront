@@ -167,7 +167,9 @@ function renderOrders(list, orders) {
     return;
   }
   list.innerHTML = orders.map(o => {
-    const items = parseItems(o.items);
+    // Schema contract: READ from order_items (the new canonical column);
+    // fall back to legacy items column for older rows still in flight.
+    const items = parseItems(o.order_items || o.items);
     const summary = items.length
       ? items.slice(0,2).map(i => `${i.emoji||'🌿'} ${i.name||''} ×${i.qty||i.quantity||1}`).join(', ') +
         (items.length > 2 ? `, +${items.length-2} more` : '')
@@ -192,3 +194,18 @@ function renderOrders(list, orders) {
 }
 
 document.addEventListener('mbg:openTracking', (e) => openTrackingScreen(e?.detail?.phone));
+
+// Checkout fires mbg:orderPlaced right after a successful place-order. If
+// the tracking screen is already mounted (e.g. the customer opened it once
+// during the session) the in-memory list would otherwise show stale data
+// until the next 15s poll tick — refetch immediately so the new order is
+// visible the moment the customer taps "Track my orders".
+document.addEventListener('mbg:orderPlaced', (e) => {
+  const phone = e?.detail?.phone;
+  if (!phone) return;
+  if (_pollCtx) {
+    // Tracking already open — reuse its DOM target and refetch now.
+    _pollCtx.phone = normalisePhone(phone);
+    refetchOrders();
+  }
+});

@@ -5,7 +5,7 @@ import { sb, logActivity } from '../core/supabase.js';
 import { esc, formatPrice, normalisePhone, isValidPHPhone, openOverlay, closeOverlay, showToast } from '../core/utils.js';
 import { EDGE_URL, SUPABASE_ANON, PAYMENT_METHODS } from '../core/config.js';
 import { getStoreSettings } from './banners.js?v=20260518-mobile';
-import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo } from './cart.js?v=20260518-mobile';
+import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo } from './cart.js?v=20260520-iphone-fix';
 import { getSession, getAuthPhone } from '../core/auth.js';
 import { getSelectedCoords } from './address.js?v=20260520-polish';
 import { initAddressMap } from './leaflet-map.js?v=20260519-leaflet';
@@ -473,6 +473,14 @@ async function placeOrder(host) {
     showSuccessScreen(data.order_number, items, total, phone);
     clearCart();
     closeCheckoutScreen();
+
+    // Tell any already-mounted tracking screen to refetch — without this the
+    // customer would land on a stale list (or worse, "No orders yet") until
+    // the 15s poll catches up. The phone here matches what the order was
+    // inserted with, so RLS lets the new row through on the very next read.
+    document.dispatchEvent(new CustomEvent('mbg:orderPlaced', {
+      detail: { phone, order_number: data.order_number }
+    }));
 
     // Verify receipt in background — badge updates when done
     if (needsReceipt && receiptFile) {

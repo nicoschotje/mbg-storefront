@@ -10,6 +10,38 @@ let _appliedPromo = null;     // string code applied
 let _autoDiscount = null;     // auto-apply rule
 let _discountRules = [];      // loaded from DB
 
+// localStorage key — survives reloads (including iOS pull-to-refresh)
+// so the customer never loses their bag mid-flow.
+const CART_STORAGE_KEY = 'mbg_cart';
+
+// Reads any previously-persisted cart on module load. Wrapped in try/catch
+// because Safari Private Mode throws on localStorage access.
+(function restoreCartFromStorage() {
+  try {
+    const raw = localStorage.getItem(CART_STORAGE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (saved && typeof saved === 'object') {
+      // Only the cart map + applied promo are persisted; everything else
+      // (discount rules, free-delivery threshold) is derived from DB.
+      if (saved.cart && typeof saved.cart === 'object') _cart = saved.cart;
+      if (typeof saved.promo === 'string') _appliedPromo = saved.promo;
+    }
+  } catch(_) { /* ignore — corrupted or unavailable storage */ }
+})();
+
+// Snapshots the current cart to localStorage. Called from every mutation
+// path (addToCart, setQty, removeItem, applyPromo, clearCart) so a reload
+// triggered by iOS pull-to-refresh, tab restore, or PWA relaunch keeps the bag.
+function persistCart() {
+  try {
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify({
+      cart: _cart,
+      promo: _appliedPromo
+    }));
+  } catch(_) { /* storage full / private mode — silently degrade to in-memory */ }
+}
+
 const subscribers = [];
 export function onCartChange(fn) {
   subscribers.push(fn);
@@ -47,6 +79,7 @@ export function addToCart(product, qty = 1) {
   if (!_cart[product.id]) _cart[product.id] = { product, qty: 0 };
   _cart[product.id].qty = Math.max(0, (_cart[product.id].qty || 0) + qty);
   if (_cart[product.id].qty === 0) delete _cart[product.id];
+  persistCart(); // snapshot to localStorage so a refresh doesn't wipe the bag
   emit();
   if (qty > 0) {
     showToast(`${product.name} added to bag`);
@@ -67,10 +100,22 @@ export function setQty(productId, qty) {
   qty = Math.max(0, Math.floor(qty || 0));
   if (qty === 0) delete _cart[productId];
   else _cart[productId].qty = qty;
+  persistCart(); // mirror the new quantity to localStorage
   emit();
 }
-export function removeItem(productId) { delete _cart[productId]; emit(); }
-export function clearCart() { _cart = {}; _appliedPromo = null; emit(); }
+export function removeItem(productId) {
+  delete _cart[productId];
+  persistCart(); // mirror removal to localStorage
+  emit();
+}
+export function clearCart() {
+  _cart = {};
+  _appliedPromo = null;
+  // Order placed (or cart manually emptied) — drop the persisted copy
+  // so a subsequent reload doesn't restore a stale bag.
+  try { localStorage.removeItem(CART_STORAGE_KEY); } catch(_) {}
+  emit();
+}
 
 // ── Promo / discount loading ────────────────────────────────
 export async function loadDiscountRules() {
@@ -105,15 +150,17 @@ export function calcDiscount(subtotal, promoCode) {
 
 export function applyPromo(code) {
   const c = String(code || '').trim().toUpperCase();
-  if (!c) { _appliedPromo = null; emit(); return { ok: true, source: 'cleared' }; }
+  if (!c) { _appliedPromo = null; persistCart(); emit(); return { ok: true, source: 'cleared' }; }
   const sub = getSubtotal();
   const d = calcDiscount(sub, c);
   if (d.source === 'promo') {
     _appliedPromo = c;
+    persistCart(); // promo is part of the cart snapshot
     emit();
     return { ok: true, amount: d.amount, source: 'promo' };
   }
   _appliedPromo = null;
+  persistCart();
   emit();
   return { ok: false, source: 'promo_invalid' };
 }
