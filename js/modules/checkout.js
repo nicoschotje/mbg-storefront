@@ -88,7 +88,7 @@ function refreshDelivery(host) {
   if (noteEl) {
     const isEstimate = !getSelectedCoords() && delivery.fee > 0;
     noteEl.textContent = isEstimate
-      ? 'Delivery fee estimated — enter a full address for an exact quote.'
+      ? '⚠️ Enter your full address above for an accurate delivery fee.'
       : '';
     noteEl.hidden = !isEstimate;
   }
@@ -254,8 +254,33 @@ function renderCheckout(host, session) {
   refreshDelivery(host);
 }
 
+function ensureQrLightbox() {
+  if (document.getElementById('qr-lightbox')) return;
+  const lb = document.createElement('div');
+  lb.id = 'qr-lightbox';
+  lb.innerHTML = '<div id="qr-lb-backdrop"></div><img id="qr-lb-img" src="" alt="QR code"/>';
+  document.body.appendChild(lb);
+  document.getElementById('qr-lb-backdrop').addEventListener('click', () => {
+    document.getElementById('qr-lightbox').classList.remove('active');
+  });
+  document.getElementById('qr-lb-img').addEventListener('click', () => {
+    document.getElementById('qr-lightbox').classList.remove('active');
+  });
+}
+
+function wireQrLightboxTriggers(box) {
+  box.querySelectorAll('.pay-qr, .usdt-qr').forEach(img => {
+    img.style.cursor = 'pointer';
+    img.addEventListener('click', () => {
+      document.getElementById('qr-lb-img').src = img.src;
+      document.getElementById('qr-lightbox').classList.add('active');
+    });
+  });
+}
+
 function renderPayInfo(box, method, totalPHP) {
   if (!box) return;
+  ensureQrLightbox();
   const ss = getStoreSettings();
   if (method === 'gcash' || method === 'maya') {
     const num   = method === 'gcash' ? ss?.gcash_number : ss?.maya_number;
@@ -269,6 +294,7 @@ function renderPayInfo(box, method, totalPHP) {
       <p class="pay-note">After paying, upload your receipt screenshot below.</p>
       <input type="file" id="receiptFile" accept="image/png,image/jpeg,image/jpg,image/webp"/>
     </div>`;
+    wireQrLightboxTriggers(box);
     return;
   }
   if (method === 'bank_transfer') {
@@ -281,6 +307,7 @@ function renderPayInfo(box, method, totalPHP) {
       <p class="pay-note">After transferring, upload your receipt below.</p>
       <input type="file" id="receiptFile" accept="image/png,image/jpeg,image/jpg,image/webp"/>
     </div>`;
+    wireQrLightboxTriggers(box);
     return;
   }
   if (method === 'usdt') {
@@ -323,6 +350,9 @@ function renderUSDTPayment(box) {
     <p class="pay-note">After sending, upload your transaction screenshot below.</p>
     <input type="file" id="receiptFile" accept="image/png,image/jpeg,image/jpg,image/webp"/>
   </div>`;
+
+  ensureQrLightbox();
+  wireQrLightboxTriggers(box);
 
   // Network selection highlight
   box.querySelectorAll('.usdt-network-option').forEach(opt => {

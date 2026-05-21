@@ -179,7 +179,7 @@ function renderOrders(list, orders) {
     const updatedTs = o.status_updated_at || o.created_at;
     return `<article class="ord-card status-${esc(status)}">
       <header>
-        <span class="ord-num">#${esc(o.order_number || o.id.slice(0,8))}</span>
+        <span class="ord-num">#${esc(o.order_number || (o.id || '').slice(0,8))}</span>
         <span class="ord-badge">${esc(STATUS_LABELS[status] || status)}</span>
       </header>
       <div class="ord-summary">${esc(summary)}</div>

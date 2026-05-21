@@ -1479,3 +1479,33 @@ body.modal-open .appFooter {
 
 /* Footer links must stay legible on the dark animated background */
 .footer a { color: var(--green-leaf); font-weight: 600; }
+
+/* QR lightbox — tap a payment QR to expand it for scanning */
+#qr-lightbox {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+#qr-lightbox.active {
+  display: flex;
+}
+#qr-lb-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+}
+#qr-lb-img {
+  position: relative;
+  z-index: 1;
+  max-width: 90vw;
+  max-height: 80vh;
+  width: auto;
+  height: auto;
+  border-radius: 16px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+  cursor: zoom-out;
+}

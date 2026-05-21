@@ -240,6 +240,9 @@ export async function tryRestoreSession() {
       try { restoredPhone = localStorage.getItem('mg_auth_phone') || ''; } catch(_) {}
     }
     _setSession(data, restoredPhone);
+    if (data.phone) {
+      try { localStorage.setItem('mg_auth_phone', data.phone); } catch(_) {}
+    }
     return _session;
   } catch(e) {
     console.warn('[auth] tryRestoreSession failed', e);
@@ -353,6 +356,8 @@ export async function logout() {
   _phone = null;
   try { sessionStorage.removeItem('mg_session_token'); } catch(_) {}
   try { sessionStorage.removeItem('mg_pin_hash'); } catch(_) {}
+  try { localStorage.removeItem('mbg_cart'); } catch(_) {}
+  try { localStorage.removeItem('mbg_delivery_coords'); } catch(_) {}
   if (t) {
     try {
       await Promise.allSettled([

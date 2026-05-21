@@ -20,7 +20,30 @@ let _activeQuery = '';
 let _dropdown = null;
 let _lastResults = [];        // raw Nominatim results backing the dropdown
 
+const COORDS_KEY = 'mbg_delivery_coords';
+
+function storeCoords(coords) {
+  _selectedCoords = coords;
+  try {
+    if (coords) localStorage.setItem(COORDS_KEY, JSON.stringify(coords));
+    else localStorage.removeItem(COORDS_KEY);
+  } catch(_) { /* private mode / quota — fall back to in-memory only */ }
+}
+
 export function getSelectedCoords() {
+  try {
+    const raw = localStorage.getItem(COORDS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Number.isFinite(parsed.lat) && Number.isFinite(parsed.lng)) {
+        _selectedCoords = parsed;
+        return parsed;
+      }
+    }
+  } catch(_) { /* corrupted storage — fall through to in-memory */ }
+  if (!_selectedCoords) {
+    console.warn('[MBG] No coords stored — delivery will use flat fallback');
+  }
   return _selectedCoords;
 }
 
@@ -130,7 +153,7 @@ function scheduleSearch(query) {
 document.addEventListener('input', (e) => {
   if (e.target?.id !== FIELD_ID) return;
   // A manual edit invalidates the coordinates of any earlier selection.
-  _selectedCoords = null;
+  storeCoords(null);
   document.dispatchEvent(new CustomEvent('mbg:deliveryAddrChanged'));
   const q = e.target.value.trim();
   _activeQuery = q;
@@ -152,9 +175,9 @@ document.addEventListener('click', (e) => {
       applyNominatimAddress(r.address, r.display_name);
       const lat = parseFloat(r.lat);
       const lon = parseFloat(r.lon);
-      _selectedCoords = (Number.isFinite(lat) && Number.isFinite(lon))
+      storeCoords((Number.isFinite(lat) && Number.isFinite(lon))
         ? { lat, lng: lon }
-        : null;
+        : null);
       if (_selectedCoords) {
         // Tell the Leaflet map to move + recentre its pin on the pick.
         document.dispatchEvent(new CustomEvent('mbg:addrPicked', {
@@ -180,6 +203,6 @@ document.addEventListener('mbg:mapPinMoved', (e) => {
   const lat = Number(e.detail?.lat);
   const lng = Number(e.detail?.lng);
   if (Number.isFinite(lat) && Number.isFinite(lng)) {
-    _selectedCoords = { lat, lng };
+    storeCoords({ lat, lng });
   }
 });
