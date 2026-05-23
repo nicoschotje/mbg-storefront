@@ -1,10 +1,17 @@
-/* MBG Storefront v2 — Google Places delivery-address autocomplete
- * Philippines-only address suggestions for the checkout Street/Building field.
- * On selection it fills the five structured address fields and stores the
- * place's coordinates so checkout can include them in the place-order payload
+/* MBG Storefront v2 — Google Places + Google Geocoder delivery address
+ * Philippines-only address handling for the checkout Street/Building field.
+ *
+ * Two address/coordinate sources, both via the Google Maps JS API:
+ *   • Places Autocomplete on #coStreet — picking a suggestion fills the five
+ *     structured fields and captures the place geometry.
+ *   • Reverse geocoding on map-pin drag — dragging the Leaflet pin stores the
+ *     new coords and refills the same five fields from the geocoded result.
+ *
+ * Either way the coordinates land in localStorage (the single source read by
+ * getSelectedCoords()) so checkout can include them in the place-order payload
  * and feed the distance-based delivery calculator. A `mbg:deliveryAddrChanged`
- * event is dispatched whenever the coordinates are picked or cleared so
- * checkout can re-quote, and `mbg:addrPicked` moves the Leaflet pin to match.
+ * event is dispatched whenever the address/coords change so checkout can
+ * re-quote, and `mbg:addrPicked` moves the Leaflet pin to match a pick.
  *
  * The #coStreet field is created on demand (and re-rendered) by checkout.js,
  * so this module loads the Google Maps script lazily on the first focus of
@@ -19,6 +26,7 @@ const GMAPS_KEY = 'AIzaSyDZ7UhB5kR5RjP7m_KEd9JZKvYFAa4iwF8';
 let _selectedCoords = null;   // { lat, lng } once a place is picked
 let _mapsPromise = null;      // single in-flight/loaded Google Maps JS promise
 let _filling = false;         // true while we programmatically fill the fields
+let _geocoder = null;         // lazily created google.maps.Geocoder instance
 
 function storeCoords(coords) {
   _selectedCoords = coords;
@@ -67,6 +75,55 @@ function loadGoogleMaps() {
   return _mapsPromise;
 }
 
+// ── Shared address-component parser ──────────────────────────────────────────
+// Maps a Google `address_components` array onto the five structured fields and
+// fires input events so any validation listeners run. _filling guards the
+// manual-edit listener below so these synthetic events don't wipe the
+// coordinates being stored alongside. `streetEl` lets the autocomplete pass
+// the exact #coStreet node it bound to (it may be mid-re-render).
+function fillAddressFields(components, streetEl) {
+  let streetNumber = '';
+  let route = '';
+  let barangay = '';
+  let city = '';
+  let province = '';
+  let postalCode = '';
+
+  for (const component of components) {
+    const types = component.types;
+    if (types.includes('street_number')) streetNumber = component.long_name;
+    if (types.includes('route')) route = component.long_name;
+    // PH barangays surface as a sublocality (or neighbourhood) component.
+    if (!barangay && (types.includes('sublocality_level_1') ||
+                      types.includes('sublocality') ||
+                      types.includes('neighborhood'))) {
+      barangay = component.long_name;
+    }
+    if (types.includes('locality')) city = component.long_name;
+    if (types.includes('administrative_area_level_2')) province = component.long_name;
+    if (!province && types.includes('administrative_area_level_1')) province = component.long_name;
+    if (types.includes('postal_code')) postalCode = component.long_name;
+  }
+
+  const street = [streetNumber, route].filter(Boolean).join(' ');
+
+  _filling = true;
+  const filled = [];
+  const set = (id, val, el) => {
+    el = el || document.getElementById(id);
+    if (el && val) { el.value = String(val); filled.push(el); }
+  };
+  set(FIELD_ID, street, streetEl);
+  set('coBarangay', barangay);
+  set('coCity', city);
+  set('coProvince', province);
+  set('coPostal', postalCode);
+  for (const el of filled) {
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  _filling = false;
+}
+
 // ── Bind Places autocomplete to the (re-rendered) #coStreet field ────────────
 async function ensureAutocomplete(field) {
   if (!field || field.dataset.gAutocomplete === '1') return;
@@ -101,49 +158,7 @@ function onPlaceChanged(autocomplete, field) {
   const place = autocomplete.getPlace();
   if (!place || !place.address_components) return;
 
-  let streetNumber = '';
-  let route = '';
-  let barangay = '';
-  let city = '';
-  let province = '';
-  let postalCode = '';
-
-  for (const component of place.address_components) {
-    const types = component.types;
-    if (types.includes('street_number')) streetNumber = component.long_name;
-    if (types.includes('route')) route = component.long_name;
-    // PH barangays surface as a sublocality (or neighbourhood) component.
-    if (!barangay && (types.includes('sublocality_level_1') ||
-                      types.includes('sublocality') ||
-                      types.includes('neighborhood'))) {
-      barangay = component.long_name;
-    }
-    if (types.includes('locality')) city = component.long_name;
-    if (types.includes('administrative_area_level_2')) province = component.long_name;
-    if (!province && types.includes('administrative_area_level_1')) province = component.long_name;
-    if (types.includes('postal_code')) postalCode = component.long_name;
-  }
-
-  const street = [streetNumber, route].filter(Boolean).join(' ');
-
-  // Fill the fields, then fire input events so any validation listeners run.
-  // _filling guards the manual-edit listener below so these synthetic events
-  // don't wipe the coordinates we're about to store.
-  _filling = true;
-  const filled = [];
-  const set = (id, val, el) => {
-    el = el || document.getElementById(id);
-    if (el && val) { el.value = String(val); filled.push(el); }
-  };
-  set(FIELD_ID, street, field);
-  set('coBarangay', barangay);
-  set('coCity', city);
-  set('coProvince', province);
-  set('coPostal', postalCode);
-  for (const el of filled) {
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-  }
-  _filling = false;
+  fillAddressFields(place.address_components, field);
 
   // Coordinates feed the distance-based delivery quote (read via
   // getSelectedCoords) and recentre the Leaflet pin.
@@ -170,12 +185,22 @@ document.addEventListener('input', (e) => {
 });
 
 // The Leaflet map pin is the other source of coordinates — when the customer
-// drags it, mirror the new position into the shared coords so that
-// getSelectedCoords() stays the single source of truth.
+// drags it, store the new position and reverse-geocode it with the Google
+// Geocoder to refresh the five address fields. getSelectedCoords() stays the
+// single source of truth.
 document.addEventListener('mbg:mapPinMoved', (e) => {
   const lat = Number(e.detail?.lat);
   const lng = Number(e.detail?.lng);
-  if (Number.isFinite(lat) && Number.isFinite(lng)) {
-    storeCoords({ lat, lng });
-  }
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+  storeCoords({ lat, lng });
+
+  // Reverse-geocode only once the Maps script is available.
+  if (!window.google?.maps?.Geocoder) return;
+  _geocoder = _geocoder || new google.maps.Geocoder();
+  _geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+    if (status !== 'OK' || !results || !results[0]) return;
+    fillAddressFields(results[0].address_components, null);
+    document.dispatchEvent(new CustomEvent('mbg:deliveryAddrChanged'));
+  });
 });
