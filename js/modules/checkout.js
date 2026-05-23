@@ -7,7 +7,7 @@ import { EDGE_URL, SUPABASE_ANON, PAYMENT_METHODS } from '../core/config.js';
 import { getStoreSettings } from './banners.js?v=20260518-mobile';
 import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo } from './cart.js?v=20260520-iphone-fix';
 import { getSession, getAuthPhone } from '../core/auth.js?v=20260520-polish';
-import { getSelectedCoords, destroyAutocomplete } from './address.js?v=20260520-polish';
+import { getSelectedCoords } from './address.js?v=20260520-polish';
 import { initAddressMap } from './leaflet-map.js?v=20260519-leaflet';
 import { calculateDelivery } from './delivery.js?v=20260518-mobile';
 
@@ -35,18 +35,19 @@ export function openCheckoutScreen() {
   renderCheckout(host, session);
   host.classList.add('open');
   document.body.classList.add('lock-scroll');
+  // Reveal the Places dropdown again (it's hidden via CSS while checkout closed).
+  document.body.classList.remove('checkout-closed');
   openOverlay('checkoutScreen', () => closeCheckoutScreen());
 }
 
 export function closeCheckoutScreen() {
-  // Tear down Google's Places dropdown (.pac-container, appended to <body>)
-  // first so it can never linger over the success screen — even if the host
-  // element is already gone.
-  destroyAutocomplete();
   const host = document.getElementById('checkoutScreen');
   if (!host) return;
   host.classList.remove('open');
   document.body.classList.remove('lock-scroll');
+  // Google appends .pac-container to <body> and it persists; hide it via CSS
+  // so it can't float over the success screen after checkout closes.
+  document.body.classList.add('checkout-closed');
   closeOverlay('checkoutScreen');
 }
 
@@ -186,7 +187,7 @@ function renderCheckout(host, session) {
         </label>
         <label class="field">
           <span>Barangay</span>
-          <input id="coBarangay" type="text" inputmode="text" autocomplete="address-level3" placeholder="Barangay" value="${esc(valBarangay)}">
+          <input id="coBarangay" type="text" inputmode="text" autocomplete="address-level3" placeholder="Enter your barangay" value="${esc(valBarangay)}">
         </label>
         <div class="field-row">
           <label class="field">

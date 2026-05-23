@@ -86,7 +86,6 @@ function loadGoogleMaps() {
 function fillAddressFields(components, streetEl) {
   let streetNumber = '';
   let route = '';
-  let barangay = '';
   let city = '';
   let province = '';
   let postalCode = '';
@@ -101,30 +100,8 @@ function fillAddressFields(components, streetEl) {
     if (types.includes('postal_code')) postalCode = component.long_name;
   }
 
-  // PH barangays surface under several Google component types depending on the
-  // locale data — check them in priority order and take the first match.
-  const barangayTypes = [
-    'sublocality_level_1','sublocality_level_2','sublocality',
-    'neighborhood','administrative_area_level_4',
-    'administrative_area_level_5'
-  ];
-  for (const type of barangayTypes) {
-    const match = components.find(c => c.types.includes(type));
-    if (match) { barangay = match.long_name; break; }
-  }
-
-  // BGC/Taguig (and similar) return the barangay only as a generic 'political'
-  // component. Use it as a last resort, but skip the political components that
-  // are really the city, province, region, or country.
-  const politicalFallback = components.find(c =>
-    c.types.includes('political') &&
-    !c.types.includes('locality') &&
-    !c.types.includes('administrative_area_level_1') &&
-    !c.types.includes('administrative_area_level_2') &&
-    !c.types.includes('country')
-  );
-  if (!barangay && politicalFallback) barangay = politicalFallback.long_name;
-
+  // Barangay is intentionally not auto-filled — Google rarely returns it for
+  // PH addresses, so the customer types it into #coBarangay themselves.
   const street = [streetNumber, route].filter(Boolean).join(' ');
 
   _filling = true;
@@ -134,7 +111,6 @@ function fillAddressFields(components, streetEl) {
     if (el && val) { el.value = String(val); filled.push(el); }
   };
   set(FIELD_ID, street, streetEl);
-  set('coBarangay', barangay);
   set('coCity', city);
   set('coProvince', province);
   set('coPostal', postalCode);
@@ -155,14 +131,11 @@ async function ensureAutocomplete(field) {
     field.dataset.gAutocomplete = '';   // let the next focus retry
     return;
   }
-  // If an autocomplete is already bound to an input that's still in the DOM,
-  // reuse it — re-initialising on every renderCheckout() is what spawned the
-  // duplicate .pac-container dropdowns that lingered on screen. Otherwise tear
-  // the stale instance (and its orphaned dropdown) down before creating one.
+  // Reuse an autocomplete that's still bound to a connected input; only build a
+  // fresh one after a checkout re-render has replaced #coStreet.
   if (_autocomplete && _autocompleteInput && _autocompleteInput.isConnected) {
     return;
   }
-  destroyAutocomplete();
 
   _autocomplete = new google.maps.places.Autocomplete(field, {
     componentRestrictions: { country: 'ph' },
@@ -170,22 +143,6 @@ async function ensureAutocomplete(field) {
   });
   _autocompleteInput = field;
   _autocomplete.addListener('place_changed', () => onPlaceChanged(_autocomplete, field));
-}
-
-// Tear down the Places widget and remove its stray .pac-container dropdown,
-// which Google appends to <body> and which would otherwise linger on top of
-// whatever screen follows checkout (e.g. the order-success overlay).
-export function destroyAutocomplete() {
-  if (_autocomplete && window.google?.maps?.event) {
-    google.maps.event.clearInstanceListeners(_autocomplete);
-  }
-  _autocomplete = null;
-  _autocompleteInput = null;
-  document.querySelectorAll('.pac-container').forEach(el => el.remove());
-  // Catch any stray Places listeners Google attached at the document level.
-  if (window.google?.maps?.event) {
-    google.maps.event.clearInstanceListeners(document);
-  }
 }
 
 // Lazy-load + bind only when the customer focuses the address field — i.e.
