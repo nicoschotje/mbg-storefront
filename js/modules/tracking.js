@@ -57,7 +57,12 @@ export function openTrackingScreen(initialPhone) {
     document.body.appendChild(host);
   }
   // The logged-in identity always wins over a passed-in phone (Path B > Path A).
-  const knownPhone = getAuthPhone() || initialPhone || '';
+  // As a final fallback, use the phone saved by the last placed order this
+  // session, so My Orders auto-loads even when the customer reaches it without
+  // tapping "Track my orders".
+  let lastOrderPhone = '';
+  try { lastOrderPhone = localStorage.getItem('mbg_last_order_phone') || ''; } catch(_) {}
+  const knownPhone = getAuthPhone() || initialPhone || lastOrderPhone || '';
   renderShell(host, knownPhone);
   host.classList.add('open');
   document.body.classList.add('lock-scroll');

@@ -50,10 +50,38 @@ export function bindLoginScreen({ phoneInputId, pinInputId, submitBtnId, biometr
   const hideErr = () => { if (errEl) errEl.classList.remove('show'); };
 
   // Pre-fill phone from last login
+  let savedPhone = '';
   try {
-    const saved = localStorage.getItem('mg_auth_phone');
-    if (saved && phoneEl && !phoneEl.value) phoneEl.value = saved;
+    savedPhone = localStorage.getItem('mg_auth_phone') || '';
+    if (savedPhone && phoneEl && !phoneEl.value) phoneEl.value = savedPhone;
   } catch(_) {}
+
+  // Returning customer: their number is already filled in, so skip phone entry
+  // and show the PIN only. The phone input is hidden (not removed) so its value
+  // still feeds PIN and biometric login. "Not you?" reveals it again.
+  if (savedPhone && phoneEl && pinEl) {
+    const phoneField = phoneEl.closest('label') || phoneEl;
+    phoneField.style.display = 'none';
+
+    const welcome = document.createElement('p');
+    welcome.className = 'login-welcome';
+    welcome.textContent = `Welcome back 👋 Signing in as ${savedPhone}`;
+
+    const change = document.createElement('span');
+    change.className = 'field-change-link';
+    change.textContent = 'Not you? Change number';
+    change.addEventListener('click', () => {
+      phoneField.style.display = '';
+      phoneEl.value = '';
+      welcome.remove();
+      change.remove();
+      phoneEl.focus();
+    });
+
+    const pinField = pinEl.closest('label') || pinEl;
+    pinField.parentNode?.insertBefore(welcome, pinField);
+    pinField.parentNode?.insertBefore(change, pinField);
+  }
 
   // Hide biometric button if browser doesn't support WebAuthn or in-app
   if (bio) {

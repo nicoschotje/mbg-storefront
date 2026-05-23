@@ -250,6 +250,30 @@ function renderCheckout(host, session) {
   renderPayInfo(host.querySelector('#payInfoBox'), _selectedPay, total);
 
   host.querySelector('#placeOrderBtn')?.addEventListener('click', () => placeOrder(host));
+
+  // For logged-in customers the name & phone are sourced from their session,
+  // so lock them against accidental edits. A "Change" link unlocks the field
+  // if the customer genuinely needs to send to a different name/number.
+  if (session) {
+    ['#coName', '#coPhone'].forEach(sel => {
+      const input = host.querySelector(sel);
+      if (!input) return;
+      input.readOnly = true;
+      const label = input.closest('label');
+      label?.classList.add('field-locked');
+      const link = document.createElement('span');
+      link.className = 'field-change-link';
+      link.textContent = '✎ Change';
+      link.addEventListener('click', () => {
+        input.readOnly = false;
+        label?.classList.remove('field-locked');
+        link.remove();
+        input.focus();
+      });
+      (label || input).appendChild(link);
+    });
+  }
+
   initAddressMap();
   refreshDelivery(host);
 }
@@ -503,6 +527,10 @@ async function placeOrder(host) {
     showSuccessScreen(data.order_number, items, total, phone);
     clearCart();
     closeCheckoutScreen();
+
+    // Remember this phone so My Orders can auto-load even if the customer
+    // navigates there without tapping "Track my orders" (see tracking.js).
+    try { localStorage.setItem('mbg_last_order_phone', phone); } catch(_) {}
 
     // Tell any already-mounted tracking screen to refetch — without this the
     // customer would land on a stale list (or worse, "No orders yet") until
