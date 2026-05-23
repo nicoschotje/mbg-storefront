@@ -141,8 +141,7 @@ async function ensureAutocomplete(field) {
 
   const autocomplete = new google.maps.places.Autocomplete(field, {
     componentRestrictions: { country: 'ph' },
-    fields: ['address_components', 'geometry'],
-    types: ['geocode']
+    fields: ['address_components', 'geometry']
   });
   autocomplete.addListener('place_changed', () => onPlaceChanged(autocomplete, field));
 }
