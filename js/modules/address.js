@@ -28,6 +28,7 @@ let _mapsPromise = null;      // single in-flight/loaded Google Maps JS promise
 let _filling = false;         // true while we programmatically fill the fields
 let _geocoder = null;         // lazily created google.maps.Geocoder instance
 let _autocomplete = null;     // current google.maps.places.Autocomplete instance
+let _autocompleteInput = null; // the input element _autocomplete is bound to
 
 function storeCoords(coords) {
   _selectedCoords = coords;
@@ -112,6 +113,18 @@ function fillAddressFields(components, streetEl) {
     if (match) { barangay = match.long_name; break; }
   }
 
+  // BGC/Taguig (and similar) return the barangay only as a generic 'political'
+  // component. Use it as a last resort, but skip the political components that
+  // are really the city, province, region, or country.
+  const politicalFallback = components.find(c =>
+    c.types.includes('political') &&
+    !c.types.includes('locality') &&
+    !c.types.includes('administrative_area_level_1') &&
+    !c.types.includes('administrative_area_level_2') &&
+    !c.types.includes('country')
+  );
+  if (!barangay && politicalFallback) barangay = politicalFallback.long_name;
+
   const street = [streetNumber, route].filter(Boolean).join(' ');
 
   _filling = true;
@@ -142,14 +155,20 @@ async function ensureAutocomplete(field) {
     field.dataset.gAutocomplete = '';   // let the next focus retry
     return;
   }
-  // A checkout re-render replaces #coStreet, orphaning the previous instance's
-  // dropdown; drop any stale .pac-container nodes before creating a fresh one.
-  document.querySelectorAll('.pac-container').forEach(el => el.remove());
+  // If an autocomplete is already bound to an input that's still in the DOM,
+  // reuse it — re-initialising on every renderCheckout() is what spawned the
+  // duplicate .pac-container dropdowns that lingered on screen. Otherwise tear
+  // the stale instance (and its orphaned dropdown) down before creating one.
+  if (_autocomplete && _autocompleteInput && _autocompleteInput.isConnected) {
+    return;
+  }
+  destroyAutocomplete();
 
   _autocomplete = new google.maps.places.Autocomplete(field, {
     componentRestrictions: { country: 'ph' },
     fields: ['address_components', 'geometry']
   });
+  _autocompleteInput = field;
   _autocomplete.addListener('place_changed', () => onPlaceChanged(_autocomplete, field));
 }
 
@@ -161,7 +180,12 @@ export function destroyAutocomplete() {
     google.maps.event.clearInstanceListeners(_autocomplete);
   }
   _autocomplete = null;
+  _autocompleteInput = null;
   document.querySelectorAll('.pac-container').forEach(el => el.remove());
+  // Catch any stray Places listeners Google attached at the document level.
+  if (window.google?.maps?.event) {
+    google.maps.event.clearInstanceListeners(document);
+  }
 }
 
 // Lazy-load + bind only when the customer focuses the address field — i.e.
