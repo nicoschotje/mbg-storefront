@@ -7,7 +7,7 @@ import { EDGE_URL, SUPABASE_ANON, PAYMENT_METHODS } from '../core/config.js';
 import { getStoreSettings } from './banners.js?v=20260518-mobile';
 import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo } from './cart.js?v=20260520-iphone-fix';
 import { getSession, getAuthPhone } from '../core/auth.js';
-import { getSelectedCoords } from './address.js?v=20260520-polish';
+import { getSelectedCoords, destroyAutocomplete } from './address.js?v=20260520-polish';
 import { initAddressMap } from './leaflet-map.js?v=20260519-leaflet';
 import { calculateDelivery } from './delivery.js?v=20260518-mobile';
 
@@ -44,6 +44,9 @@ export function closeCheckoutScreen() {
   host.classList.remove('open');
   document.body.classList.remove('lock-scroll');
   closeOverlay('checkoutScreen');
+  // Google appends the Places dropdown (.pac-container) to <body>; tear it
+  // down so it can't linger over the success screen after checkout closes.
+  destroyAutocomplete();
 }
 
 // Runs the distance-based calculator with the live store_settings values
@@ -101,6 +104,7 @@ document.addEventListener('mbg:deliveryAddrChanged', () => {
 });
 
 function renderCheckout(host, session) {
+  console.log('[checkout] session at render:', JSON.stringify(session));
   const ss = getStoreSettings();
   const items = getCartItems();
   const subtotal = getSubtotal();
@@ -128,6 +132,11 @@ function renderCheckout(host, session) {
   const valPostal   = prev.postal   !== undefined ? prev.postal   : '';
   const valNotes    = prev.notes    !== undefined ? prev.notes    : '';
   const valPromo    = prev.promo    !== undefined ? prev.promo    : (getAppliedPromo() || '');
+
+  // Lock name/phone only when the session actually supplies them — a logged-in
+  // customer with no display_name should still be able to type their name.
+  const lockName  = !!(session && session.display_name);
+  const lockPhone = !!(session && getAuthPhone());
 
   const delivery = computeDelivery(ss, subtotal);
   const total = Math.max(0, subtotal + delivery.fee - disc.amount);
@@ -158,13 +167,15 @@ function renderCheckout(host, session) {
 
       <section class="check-section">
         <h3>Your details</h3>
-        <label class="field">
+        <label class="field${lockName ? ' field-locked' : ''}">
           <span>Full name</span>
-          <input id="coName" type="text" autocomplete="name" placeholder="Juan Dela Cruz" value="${esc(valName)}">
+          <input id="coName" type="text" autocomplete="name" placeholder="Juan Dela Cruz" value="${esc(valName)}"${lockName ? ' readonly' : ''}>
+          ${lockName ? '<span class="field-change-link" data-edit="coName">✎ Edit</span>' : ''}
         </label>
-        <label class="field">
+        <label class="field${lockPhone ? ' field-locked' : ''}">
           <span>Mobile number</span>
-          <input id="coPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+63 9XX XXX XXXX" value="${esc(valPhone)}">
+          <input id="coPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+63 9XX XXX XXXX" value="${esc(valPhone)}"${lockPhone ? ' readonly' : ''}>
+          ${lockPhone ? '<span class="field-change-link" data-edit="coPhone">✎ Edit</span>' : ''}
         </label>
         <label class="field">
           <span>Street / Building</span>
@@ -251,28 +262,19 @@ function renderCheckout(host, session) {
 
   host.querySelector('#placeOrderBtn')?.addEventListener('click', () => placeOrder(host));
 
-  // For logged-in customers the name & phone are sourced from their session,
-  // so lock them against accidental edits. A "Change" link unlocks the field
-  // if the customer genuinely needs to send to a different name/number.
-  if (session) {
-    ['#coName', '#coPhone'].forEach(sel => {
-      const input = host.querySelector(sel);
+  // The name/phone fields render locked (readonly) when the session supplies
+  // them; the inline "Edit" link unlocks the field so the customer can still
+  // override the value for this order.
+  host.querySelectorAll('.field-change-link[data-edit]').forEach(link => {
+    link.addEventListener('click', () => {
+      const input = host.querySelector('#' + link.dataset.edit);
       if (!input) return;
-      input.readOnly = true;
-      const label = input.closest('label');
-      label?.classList.add('field-locked');
-      const link = document.createElement('span');
-      link.className = 'field-change-link';
-      link.textContent = '✎ Change';
-      link.addEventListener('click', () => {
-        input.readOnly = false;
-        label?.classList.remove('field-locked');
-        link.remove();
-        input.focus();
-      });
-      (label || input).appendChild(link);
+      input.readOnly = false;
+      input.closest('label')?.classList.remove('field-locked');
+      link.remove();
+      input.focus();
     });
-  }
+  });
 
   initAddressMap();
   refreshDelivery(host);

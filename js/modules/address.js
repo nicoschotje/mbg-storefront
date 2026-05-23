@@ -27,6 +27,7 @@ let _selectedCoords = null;   // { lat, lng } once a place is picked
 let _mapsPromise = null;      // single in-flight/loaded Google Maps JS promise
 let _filling = false;         // true while we programmatically fill the fields
 let _geocoder = null;         // lazily created google.maps.Geocoder instance
+let _autocomplete = null;     // current google.maps.places.Autocomplete instance
 
 function storeCoords(coords) {
   _selectedCoords = coords;
@@ -139,11 +140,22 @@ async function ensureAutocomplete(field) {
   // dropdown; drop any stale .pac-container nodes before creating a fresh one.
   document.querySelectorAll('.pac-container').forEach(el => el.remove());
 
-  const autocomplete = new google.maps.places.Autocomplete(field, {
+  _autocomplete = new google.maps.places.Autocomplete(field, {
     componentRestrictions: { country: 'ph' },
     fields: ['address_components', 'geometry']
   });
-  autocomplete.addListener('place_changed', () => onPlaceChanged(autocomplete, field));
+  _autocomplete.addListener('place_changed', () => onPlaceChanged(_autocomplete, field));
+}
+
+// Tear down the Places widget and remove its stray .pac-container dropdown,
+// which Google appends to <body> and which would otherwise linger on top of
+// whatever screen follows checkout (e.g. the order-success overlay).
+export function destroyAutocomplete() {
+  if (_autocomplete && window.google?.maps?.event) {
+    google.maps.event.clearInstanceListeners(_autocomplete);
+  }
+  _autocomplete = null;
+  document.querySelectorAll('.pac-container').forEach(el => el.remove());
 }
 
 // Lazy-load + bind only when the customer focuses the address field — i.e.
