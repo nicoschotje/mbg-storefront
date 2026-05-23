@@ -2,9 +2,8 @@
  *
  * Renders a small map with a single draggable pin inside the checkout
  * #addr-map container, visible from the start of checkout. Dragging the
- * pin reverse-geocodes the drop point (debounced) and fills the five
- * structured address fields, while picking a Nominatim autocomplete
- * suggestion moves the pin to match.
+ * pin updates the stored delivery coordinates, while picking a Google
+ * Places autocomplete suggestion moves the pin to match.
  *
  * The pin's position is mirrored into address.js (the single source of
  * truth for getSelectedCoords()) via the `mbg:mapPinMoved` event, and a
@@ -13,7 +12,7 @@
  * Leaflet itself is loaded from the jsDelivr CDN in index.html, exposing
  * the global `L`.
  */
-import { getSelectedCoords, applyNominatimAddress } from './address.js?v=20260520-polish';
+import { getSelectedCoords } from './address.js?v=20260520-polish';
 import { getStoreSettings } from './banners.js?v=20260518-mobile';
 
 // Fallback centre (Manila) used only when store coords are missing.
@@ -21,7 +20,6 @@ const MANILA = { lat: 14.5995, lng: 120.9842 };
 
 let _map = null;
 let _marker = null;
-let _reverseTimer = null;
 
 // Initialise (or re-initialise) the map. Called on every checkout render —
 // a re-render replaces the #addr-map node, so the old instance is dropped.
@@ -66,35 +64,12 @@ function resolveCenter() {
 
 function onMarkerDragEnd() {
   const { lat, lng } = _marker.getLatLng();
-  // Update the shared coords + re-quote immediately; reverse-geocoding the
-  // address text can lag behind a fast finger.
+  // Update the shared coords + re-quote the delivery fee immediately.
   document.dispatchEvent(new CustomEvent('mbg:mapPinMoved', { detail: { lat, lng } }));
   document.dispatchEvent(new CustomEvent('mbg:deliveryAddrChanged'));
-
-  // Debounce the Nominatim call so repeated drags only fire once (1 req/sec
-  // fair-use limit). The browser sends a Referer automatically for identity.
-  clearTimeout(_reverseTimer);
-  _reverseTimer = setTimeout(() => reverseGeocode(lat, lng), 500);
 }
 
-async function reverseGeocode(lat, lng) {
-  const url = 'https://nominatim.openstreetmap.org/reverse'
-    + '?format=json&addressdetails=1'
-    + '&lat=' + encodeURIComponent(lat)
-    + '&lon=' + encodeURIComponent(lng);
-  try {
-    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-    if (!res.ok) throw new Error('nominatim reverse ' + res.status);
-    const data = await res.json();
-    if (data && data.address) {
-      applyNominatimAddress(data.address, data.display_name);
-    }
-  } catch (e) {
-    console.warn('[leaflet-map] reverse geocode failed', e);
-  }
-}
-
-// A Nominatim autocomplete pick on #coStreet — move + recentre the pin.
+// A Google Places autocomplete pick on #coStreet — move + recentre the pin.
 document.addEventListener('mbg:addrPicked', (e) => {
   const lat = Number(e.detail?.lat);
   const lng = Number(e.detail?.lng);
