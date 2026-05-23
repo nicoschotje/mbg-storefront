@@ -94,16 +94,22 @@ function fillAddressFields(components, streetEl) {
     const types = component.types;
     if (types.includes('street_number')) streetNumber = component.long_name;
     if (types.includes('route')) route = component.long_name;
-    // PH barangays surface as a sublocality (or neighbourhood) component.
-    if (!barangay && (types.includes('sublocality_level_1') ||
-                      types.includes('sublocality') ||
-                      types.includes('neighborhood'))) {
-      barangay = component.long_name;
-    }
     if (types.includes('locality')) city = component.long_name;
     if (types.includes('administrative_area_level_2')) province = component.long_name;
     if (!province && types.includes('administrative_area_level_1')) province = component.long_name;
     if (types.includes('postal_code')) postalCode = component.long_name;
+  }
+
+  // PH barangays surface under several Google component types depending on the
+  // locale data — check them in priority order and take the first match.
+  const barangayTypes = [
+    'sublocality_level_1','sublocality_level_2','sublocality',
+    'neighborhood','administrative_area_level_4',
+    'administrative_area_level_5'
+  ];
+  for (const type of barangayTypes) {
+    const match = components.find(c => c.types.includes(type));
+    if (match) { barangay = match.long_name; break; }
   }
 
   const street = [streetNumber, route].filter(Boolean).join(' ');

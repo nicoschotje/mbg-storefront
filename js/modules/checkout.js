@@ -39,14 +39,15 @@ export function openCheckoutScreen() {
 }
 
 export function closeCheckoutScreen() {
+  // Tear down Google's Places dropdown (.pac-container, appended to <body>)
+  // first so it can never linger over the success screen — even if the host
+  // element is already gone.
+  destroyAutocomplete();
   const host = document.getElementById('checkoutScreen');
   if (!host) return;
   host.classList.remove('open');
   document.body.classList.remove('lock-scroll');
   closeOverlay('checkoutScreen');
-  // Google appends the Places dropdown (.pac-container) to <body>; tear it
-  // down so it can't linger over the success screen after checkout closes.
-  destroyAutocomplete();
 }
 
 // Runs the distance-based calculator with the live store_settings values
@@ -133,11 +134,6 @@ function renderCheckout(host, session) {
   const valNotes    = prev.notes    !== undefined ? prev.notes    : '';
   const valPromo    = prev.promo    !== undefined ? prev.promo    : (getAppliedPromo() || '');
 
-  // Lock name/phone only when the session actually supplies them — a logged-in
-  // customer with no display_name should still be able to type their name.
-  const lockName  = !!(session && session.display_name);
-  const lockPhone = !!(session && getAuthPhone());
-
   const delivery = computeDelivery(ss, subtotal);
   const total = Math.max(0, subtotal + delivery.fee - disc.amount);
 
@@ -167,15 +163,23 @@ function renderCheckout(host, session) {
 
       <section class="check-section">
         <h3>Your details</h3>
-        <label class="field${lockName ? ' field-locked' : ''}">
+        <label class="field">
           <span>Full name</span>
-          <input id="coName" type="text" autocomplete="name" placeholder="Juan Dela Cruz" value="${esc(valName)}"${lockName ? ' readonly' : ''}>
-          ${lockName ? '<span class="field-change-link" data-edit="coName">✎ Edit</span>' : ''}
+          <input id="coName" type="text"
+            autocomplete="name"
+            placeholder="Juan Dela Cruz"
+            value="${esc(valName)}"
+            ${valName ? 'readonly' : ''}>
+          ${valName ? '<span class="field-change-link" data-unlock="coName">✎ Edit</span>' : ''}
         </label>
-        <label class="field${lockPhone ? ' field-locked' : ''}">
+        <label class="field">
           <span>Mobile number</span>
-          <input id="coPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+63 9XX XXX XXXX" value="${esc(valPhone)}"${lockPhone ? ' readonly' : ''}>
-          ${lockPhone ? '<span class="field-change-link" data-edit="coPhone">✎ Edit</span>' : ''}
+          <input id="coPhone" type="tel" inputmode="tel"
+            autocomplete="tel"
+            placeholder="+63 9XX XXX XXXX"
+            value="${esc(valPhone)}"
+            ${valPhone ? 'readonly' : ''}>
+          ${valPhone ? '<span class="field-change-link" data-unlock="coPhone">✎ Edit</span>' : ''}
         </label>
         <label class="field">
           <span>Street / Building</span>
@@ -262,17 +266,13 @@ function renderCheckout(host, session) {
 
   host.querySelector('#placeOrderBtn')?.addEventListener('click', () => placeOrder(host));
 
-  // The name/phone fields render locked (readonly) when the session supplies
-  // them; the inline "Edit" link unlocks the field so the customer can still
-  // override the value for this order.
-  host.querySelectorAll('.field-change-link[data-edit]').forEach(link => {
-    link.addEventListener('click', () => {
-      const input = host.querySelector('#' + link.dataset.edit);
-      if (!input) return;
-      input.readOnly = false;
-      input.closest('label')?.classList.remove('field-locked');
-      link.remove();
-      input.focus();
+  // The name/phone fields render readonly when pre-filled; the inline "Edit"
+  // link unlocks the field so the customer can override the value.
+  host.querySelectorAll('.field-change-link[data-unlock]').forEach(el => {
+    el.addEventListener('click', () => {
+      const input = host.querySelector('#' + el.dataset.unlock);
+      if (input) { input.removeAttribute('readonly'); input.focus(); }
+      el.remove();
     });
   });
 

@@ -586,6 +586,9 @@
 .field-locked input { background: var(--input-bg, #f9f7f2); color: #888; cursor: default; }
 .field-change-link { font-size: 12px; color: #888; text-decoration: underline; cursor: pointer; display: block; margin-top: 2px; }
 
+/* Google Places dropdown is appended to <body>; keep it above overlays. */
+.pac-container { z-index: 9999; }
+
 .zone-grid {
   display: grid; grid-template-columns: 1fr 1fr 1fr;
   gap: 0.5rem;
