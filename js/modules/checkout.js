@@ -105,7 +105,6 @@ document.addEventListener('mbg:deliveryAddrChanged', () => {
 });
 
 function renderCheckout(host, session) {
-  console.log('[checkout] session at render:', JSON.stringify(session));
   const ss = getStoreSettings();
   const items = getCartItems();
   const subtotal = getSubtotal();

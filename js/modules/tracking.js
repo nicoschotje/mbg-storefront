@@ -2,7 +2,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_ANON } from '../core/config.js';
 import { esc, formatPrice, normalisePhone, isValidPHPhone, openOverlay, closeOverlay, parseItems, timeAgo, showToast } from '../core/utils.js';
-import { getAuthPhone } from '../core/auth.js';
+import { getAuthPhone } from '../core/auth.js?v=20260520-polish';
 
 // Friendly, customer-facing labels for the dashboard's order_status values.
 const STATUS_LABELS = {

@@ -6,7 +6,7 @@
  */
 import { sb } from '../core/supabase.js';
 import { esc } from '../core/utils.js';
-import { getSession, getAuthPhone } from '../core/auth.js';
+import { getSession, getAuthPhone } from '../core/auth.js?v=20260520-polish';
 
 const TIER_META = {
   1: { name: 'Seedling', color: '#94a3b8' },
