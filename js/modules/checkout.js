@@ -6,7 +6,7 @@ import { esc, formatPrice, normalisePhone, isValidPHPhone, openOverlay, closeOve
 import { EDGE_URL, SUPABASE_ANON, PAYMENT_METHODS } from '../core/config.js';
 import { getStoreSettings } from './banners.js?v=20260518-mobile';
 import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo } from './cart.js?v=20260520-iphone-fix';
-import { getSession, getAuthPhone } from '../core/auth.js';
+import { getSession, getAuthPhone } from '../core/auth.js?v=20260520-polish';
 import { getSelectedCoords, destroyAutocomplete } from './address.js?v=20260520-polish';
 import { initAddressMap } from './leaflet-map.js?v=20260519-leaflet';
 import { calculateDelivery } from './delivery.js?v=20260518-mobile';
