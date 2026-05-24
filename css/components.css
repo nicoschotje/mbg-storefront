@@ -590,7 +590,7 @@
    checkout is open, and hide it entirely once checkout closes (it persists in
    the DOM, so CSS is the reliable way to keep it off the success screen). */
 .pac-container { z-index: 9999; }
-body.checkout-closed .pac-container { display: none !important; }
+body:not(.checkout-open) .pac-container { display: none !important; }
 
 .zone-grid {
   display: grid; grid-template-columns: 1fr 1fr 1fr;

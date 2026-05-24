@@ -35,19 +35,19 @@ export function openCheckoutScreen() {
   renderCheckout(host, session);
   host.classList.add('open');
   document.body.classList.add('lock-scroll');
-  // Reveal the Places dropdown again (it's hidden via CSS while checkout closed).
-  document.body.classList.remove('checkout-closed');
   openOverlay('checkoutScreen', () => closeCheckoutScreen());
+  // Reveal the Places dropdown (CSS hides it unless body has .checkout-open).
+  document.body.classList.add('checkout-open');
 }
 
 export function closeCheckoutScreen() {
+  // Hide the persistent Google .pac-container — CSS hides it unless body has
+  // .checkout-open, so it can't float over the success screen after close.
+  document.body.classList.remove('checkout-open');
   const host = document.getElementById('checkoutScreen');
   if (!host) return;
   host.classList.remove('open');
   document.body.classList.remove('lock-scroll');
-  // Google appends .pac-container to <body> and it persists; hide it via CSS
-  // so it can't float over the success screen after checkout closes.
-  document.body.classList.add('checkout-closed');
   closeOverlay('checkoutScreen');
 }
 
