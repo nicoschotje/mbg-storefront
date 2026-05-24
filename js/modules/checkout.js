@@ -6,7 +6,7 @@ import { esc, formatPrice, normalisePhone, isValidPHPhone, openOverlay, closeOve
 import { EDGE_URL, SUPABASE_ANON, PAYMENT_METHODS } from '../core/config.js';
 import { getStoreSettings } from './banners.js?v=20260518-mobile';
 import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo } from './cart.js?v=20260520-iphone-fix';
-import { getSession, getAuthPhone } from '../core/auth.js';
+import { getSession, getAuthPhone } from '../core/auth.js?v=20260520-polish';
 import { getSelectedCoords } from './address.js?v=20260520-polish';
 import { initAddressMap } from './leaflet-map.js?v=20260519-leaflet';
 import { calculateDelivery } from './delivery.js?v=20260518-mobile';
@@ -36,9 +36,14 @@ export function openCheckoutScreen() {
   host.classList.add('open');
   document.body.classList.add('lock-scroll');
   openOverlay('checkoutScreen', () => closeCheckoutScreen());
+  // Reveal the Places dropdown (CSS hides it unless body has .checkout-open).
+  document.body.classList.add('checkout-open');
 }
 
 export function closeCheckoutScreen() {
+  // Hide the persistent Google .pac-container — CSS hides it unless body has
+  // .checkout-open, so it can't float over the success screen after close.
+  document.body.classList.remove('checkout-open');
   const host = document.getElementById('checkoutScreen');
   if (!host) return;
   host.classList.remove('open');
@@ -160,11 +165,21 @@ function renderCheckout(host, session) {
         <h3>Your details</h3>
         <label class="field">
           <span>Full name</span>
-          <input id="coName" type="text" autocomplete="name" placeholder="Juan Dela Cruz" value="${esc(valName)}">
+          <input id="coName" type="text"
+            autocomplete="name"
+            placeholder="Juan Dela Cruz"
+            value="${esc(valName)}"
+            ${valName ? 'readonly' : ''}>
+          ${valName ? '<span class="field-change-link" data-unlock="coName">✎ Edit</span>' : ''}
         </label>
         <label class="field">
           <span>Mobile number</span>
-          <input id="coPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+63 9XX XXX XXXX" value="${esc(valPhone)}">
+          <input id="coPhone" type="tel" inputmode="tel"
+            autocomplete="tel"
+            placeholder="+63 9XX XXX XXXX"
+            value="${esc(valPhone)}"
+            ${valPhone ? 'readonly' : ''}>
+          ${valPhone ? '<span class="field-change-link" data-unlock="coPhone">✎ Edit</span>' : ''}
         </label>
         <label class="field">
           <span>Street / Building</span>
@@ -172,7 +187,7 @@ function renderCheckout(host, session) {
         </label>
         <label class="field">
           <span>Barangay</span>
-          <input id="coBarangay" type="text" inputmode="text" autocomplete="address-level3" placeholder="Barangay" value="${esc(valBarangay)}">
+          <input id="coBarangay" type="text" inputmode="text" autocomplete="address-level3" placeholder="Enter your barangay" value="${esc(valBarangay)}">
         </label>
         <div class="field-row">
           <label class="field">
@@ -250,6 +265,17 @@ function renderCheckout(host, session) {
   renderPayInfo(host.querySelector('#payInfoBox'), _selectedPay, total);
 
   host.querySelector('#placeOrderBtn')?.addEventListener('click', () => placeOrder(host));
+
+  // The name/phone fields render readonly when pre-filled; the inline "Edit"
+  // link unlocks the field so the customer can override the value.
+  host.querySelectorAll('.field-change-link[data-unlock]').forEach(el => {
+    el.addEventListener('click', () => {
+      const input = host.querySelector('#' + el.dataset.unlock);
+      if (input) { input.removeAttribute('readonly'); input.focus(); }
+      el.remove();
+    });
+  });
+
   initAddressMap();
   refreshDelivery(host);
 }
@@ -503,6 +529,10 @@ async function placeOrder(host) {
     showSuccessScreen(data.order_number, items, total, phone);
     clearCart();
     closeCheckoutScreen();
+
+    // Remember this phone so My Orders can auto-load even if the customer
+    // navigates there without tapping "Track my orders" (see tracking.js).
+    try { localStorage.setItem('mbg_last_order_phone', phone); } catch(_) {}
 
     // Tell any already-mounted tracking screen to refetch — without this the
     // customer would land on a stale list (or worse, "No orders yet") until

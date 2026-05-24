@@ -27,6 +27,8 @@ let _selectedCoords = null;   // { lat, lng } once a place is picked
 let _mapsPromise = null;      // single in-flight/loaded Google Maps JS promise
 let _filling = false;         // true while we programmatically fill the fields
 let _geocoder = null;         // lazily created google.maps.Geocoder instance
+let _autocomplete = null;     // current google.maps.places.Autocomplete instance
+let _autocompleteInput = null; // the input element _autocomplete is bound to
 
 function storeCoords(coords) {
   _selectedCoords = coords;
@@ -81,10 +83,9 @@ function loadGoogleMaps() {
 // manual-edit listener below so these synthetic events don't wipe the
 // coordinates being stored alongside. `streetEl` lets the autocomplete pass
 // the exact #coStreet node it bound to (it may be mid-re-render).
-function fillAddressFields(components, streetEl) {
+function fillAddressFields(components, streetEl, lat, lng) {
   let streetNumber = '';
   let route = '';
-  let barangay = '';
   let city = '';
   let province = '';
   let postalCode = '';
@@ -93,12 +94,6 @@ function fillAddressFields(components, streetEl) {
     const types = component.types;
     if (types.includes('street_number')) streetNumber = component.long_name;
     if (types.includes('route')) route = component.long_name;
-    // PH barangays surface as a sublocality (or neighbourhood) component.
-    if (!barangay && (types.includes('sublocality_level_1') ||
-                      types.includes('sublocality') ||
-                      types.includes('neighborhood'))) {
-      barangay = component.long_name;
-    }
     if (types.includes('locality')) city = component.long_name;
     if (types.includes('administrative_area_level_2')) province = component.long_name;
     if (!province && types.includes('administrative_area_level_1')) province = component.long_name;
@@ -114,7 +109,6 @@ function fillAddressFields(components, streetEl) {
     if (el && val) { el.value = String(val); filled.push(el); }
   };
   set(FIELD_ID, street, streetEl);
-  set('coBarangay', barangay);
   set('coCity', city);
   set('coProvince', province);
   set('coPostal', postalCode);
@@ -122,6 +116,35 @@ function fillAddressFields(components, streetEl) {
     el.dispatchEvent(new Event('input', { bubbles: true }));
   }
   _filling = false;
+
+  // Google rarely returns the barangay for PH addresses. If the field is still
+  // empty and we have the place coordinates, backfill it from a Nominatim
+  // reverse geocode (which does expose barangay-level data).
+  const bgyEl = document.getElementById('coBarangay');
+  if (bgyEl && !bgyEl.value.trim() && Number.isFinite(lat) && Number.isFinite(lng)) {
+    backfillBarangayFromNominatim(lat, lng, bgyEl);
+  }
+}
+
+// Reverse-geocodes lat/lng via Nominatim purely to obtain the barangay that
+// Google Places omits for the Philippines. Only writes #coBarangay if it's
+// still empty when the response lands, so it never clobbers manual input.
+async function backfillBarangayFromNominatim(lat, lng, bgyEl) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&lat=${lat}&lon=${lng}`
+    );
+    if (!res.ok) return;
+    const data = await res.json();
+    const a = data?.address || {};
+    const barangay = a.suburb || a.neighbourhood || a.village || a.quarter || a.residential;
+    if (barangay && !bgyEl.value.trim()) {
+      bgyEl.value = barangay;
+      bgyEl.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  } catch (e) {
+    console.warn('[address] barangay reverse-geocode failed', e);
+  }
 }
 
 // ── Bind Places autocomplete to the (re-rendered) #coStreet field ────────────
@@ -135,15 +158,18 @@ async function ensureAutocomplete(field) {
     field.dataset.gAutocomplete = '';   // let the next focus retry
     return;
   }
-  // A checkout re-render replaces #coStreet, orphaning the previous instance's
-  // dropdown; drop any stale .pac-container nodes before creating a fresh one.
-  document.querySelectorAll('.pac-container').forEach(el => el.remove());
+  // Reuse an autocomplete that's still bound to a connected input; only build a
+  // fresh one after a checkout re-render has replaced #coStreet.
+  if (_autocomplete && _autocompleteInput && _autocompleteInput.isConnected) {
+    return;
+  }
 
-  const autocomplete = new google.maps.places.Autocomplete(field, {
+  _autocomplete = new google.maps.places.Autocomplete(field, {
     componentRestrictions: { country: 'ph' },
     fields: ['address_components', 'geometry']
   });
-  autocomplete.addListener('place_changed', () => onPlaceChanged(autocomplete, field));
+  _autocompleteInput = field;
+  _autocomplete.addListener('place_changed', () => onPlaceChanged(_autocomplete, field));
 }
 
 // Lazy-load + bind only when the customer focuses the address field — i.e.
@@ -157,13 +183,19 @@ function onPlaceChanged(autocomplete, field) {
   const place = autocomplete.getPlace();
   if (!place || !place.address_components) return;
 
-  fillAddressFields(place.address_components, field);
-
   // Coordinates feed the distance-based delivery quote (read via
-  // getSelectedCoords) and recentre the Leaflet pin.
+  // getSelectedCoords), recentre the Leaflet pin, and drive the Nominatim
+  // barangay backfill inside fillAddressFields.
   const loc = place.geometry?.location;
   const lat = loc ? loc.lat() : null;
   const lng = loc ? loc.lng() : null;
+
+  fillAddressFields(place.address_components, field, lat, lng);
+
+  // Drop focus from the Street input so the Google dropdown collapses cleanly.
+  const el = document.getElementById('coStreet');
+  if (el) el.blur();
+
   if (Number.isFinite(lat) && Number.isFinite(lng)) {
     storeCoords({ lat, lng });
     document.dispatchEvent(new CustomEvent('mbg:addrPicked', { detail: { lat, lng } }));
@@ -199,7 +231,7 @@ document.addEventListener('mbg:mapPinMoved', (e) => {
   _geocoder = _geocoder || new google.maps.Geocoder();
   _geocoder.geocode({ location: { lat, lng } }, (results, status) => {
     if (status !== 'OK' || !results || !results[0]) return;
-    fillAddressFields(results[0].address_components, null);
+    fillAddressFields(results[0].address_components, null, lat, lng);
     document.dispatchEvent(new CustomEvent('mbg:deliveryAddrChanged'));
   });
 });

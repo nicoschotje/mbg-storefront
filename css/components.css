@@ -583,6 +583,15 @@
   box-shadow: 0 0 0 3px rgba(55,92,59,0.15);
 }
 
+.field-locked input { background: var(--input-bg, #f9f7f2); color: #888; cursor: default; }
+.field-change-link { font-size: 12px; color: #888; text-decoration: underline; cursor: pointer; display: block; margin-top: 2px; }
+
+/* Google Places dropdown is appended to <body>; keep it above overlays while
+   checkout is open, and hide it entirely once checkout closes (it persists in
+   the DOM, so CSS is the reliable way to keep it off the success screen). */
+.pac-container { z-index: 10000 !important; }
+body:not(.checkout-open) .pac-container { display: none !important; }
+
 .zone-grid {
   display: grid; grid-template-columns: 1fr 1fr 1fr;
   gap: 0.5rem;
