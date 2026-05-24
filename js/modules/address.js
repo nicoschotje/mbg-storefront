@@ -192,6 +192,10 @@ function onPlaceChanged(autocomplete, field) {
 
   fillAddressFields(place.address_components, field, lat, lng);
 
+  // Drop focus from the Street input so the Google dropdown collapses cleanly.
+  const el = document.getElementById('coStreet');
+  if (el) el.blur();
+
   if (Number.isFinite(lat) && Number.isFinite(lng)) {
     storeCoords({ lat, lng });
     document.dispatchEvent(new CustomEvent('mbg:addrPicked', { detail: { lat, lng } }));
