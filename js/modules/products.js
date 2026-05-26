@@ -185,21 +185,25 @@ function productMatchesCat(p, cat) {
 
 function productCardHtml(p, isWide=false) {
   const img = p.image_url || p.image || '';
-  const stock = p.stock_qty ?? p.stock ?? null;
-  const inStock = stock === null || stock > 0;
   const type = p.type || p.strain_type || p.category || '';
   const name = p.name || 'Untitled';
   const hasVariants = p.has_variants === true;
   const variantCount = Number(p._variantCount) || 0;
-  // Parent-with-variants card: strain count pill + Choose Strain CTA instead
-  // of the normal +Add. Stock check still applies — a parent with 0 stock
-  // falls back to Notify Me just like a standard product.
-  const footer = hasVariants && inStock
-    ? `<span class="variant-count-pill">${variantCount} strain${variantCount === 1 ? '' : 's'} available</span>
-       <button type="button" class="choose-strain-btn" data-id="${esc(p.id)}">Choose Strain</button>`
-    : (inStock
-        ? `<button type="button" class="product-add-btn" data-id="${esc(p.id)}">+ Add</button>`
-        : `<button type="button" class="notify-btn" data-id="${esc(p.id)}">Notify Me</button>`);
+  // Parent-with-variants cards short-circuit the stock check — a parent is a
+  // virtual grouping row whose own stock_qty stays 0; the real stock lives
+  // on the individual variants. Stock only gates the +Add / Notify Me path
+  // for plain (non-variant) products.
+  let footer;
+  if (hasVariants) {
+    footer = `<span class="variant-count-pill">${variantCount} strain${variantCount === 1 ? '' : 's'} available</span>
+       <button type="button" class="choose-strain-btn" data-id="${esc(p.id)}">Choose Strain</button>`;
+  } else {
+    const stock = p.stock_qty ?? p.stock ?? null;
+    const inStock = stock === null || stock > 0;
+    footer = inStock
+      ? `<button type="button" class="product-add-btn" data-id="${esc(p.id)}">+ Add</button>`
+      : `<button type="button" class="notify-btn" data-id="${esc(p.id)}">Notify Me</button>`;
+  }
   return `<article class="product-card${isWide?' product-card-wide':''}${hasVariants?' product-card-variants':''}" data-id="${esc(p.id)}"><div class="product-img-wrap">${img ? `<img src="${esc(img)}" alt="${esc(name)}" loading="lazy"/>` : `<div class="product-img-placeholder">${esc(p.emoji || '🌿')}</div>`}${type ? `<span class="type-chip">${esc(type)}</span>` : ''}<span class="price-badge">${esc(formatPrice(p.price))}</span></div><div class="product-info"><h3 class="product-name">${esc(name)}</h3>${p.subtitle ? `<div class="product-sub">${esc(p.subtitle)}</div>` : ''}<div class="product-footer">${footer}</div></div></article>`;
 }
 
