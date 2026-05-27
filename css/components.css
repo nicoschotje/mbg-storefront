@@ -890,6 +890,27 @@ body:not(.checkout-open) .pac-container { display: none !important; }
   color: var(--text-light);
   margin-top: 0.4rem;
 }
+.ord-note {
+  background: rgba(184, 212, 144, 0.18);
+  border-left: 3px solid var(--green-mid);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.7rem;
+  margin: 0.1rem 0 0.55rem;
+}
+.ord-note-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--green-dark);
+  letter-spacing: 0.02em;
+  margin-bottom: 0.2rem;
+}
+.ord-note-body {
+  font-size: 0.82rem;
+  color: var(--text);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 /* ── LOGIN GATE ─────────────────────────────────────────── */
 .login-screen {
