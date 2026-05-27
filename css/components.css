@@ -1518,3 +1518,305 @@ body.modal-open .appFooter {
   box-shadow: 0 8px 40px rgba(0,0,0,0.6);
   cursor: zoom-out;
 }
+
+/* ── STRAIN PICKER (Phase 3 variants) ─────────────────────
+   Slide-up sheet shown for parent products with has_variants=true.
+   Reuses the .modal-backdrop motion vocabulary — same translate/cubic-bezier
+   so it lands flush with the rest of the sheet UI in the app. */
+
+.product-card-variants .variant-count-pill {
+  display: inline-block;
+  background: rgba(184,212,144,0.18);
+  color: var(--green-dark);
+  font-size: 0.70rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 0.28rem 0.6rem;
+  border-radius: 50px;
+  border: 1px solid rgba(25,45,30,0.12);
+  margin-right: 0.5rem;
+  white-space: nowrap;
+}
+.product-card-variants .product-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.choose-strain-btn {
+  flex: 1 1 auto;
+  background: var(--green-mid);
+  color: var(--green-leaf);
+  border: none;
+  border-radius: 50px;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  min-height: 40px;
+  white-space: nowrap;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.22), 0 4px 12px rgba(25,45,30,0.25);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.choose-strain-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.22), 0 2px 8px rgba(25,45,30,0.20);
+}
+
+.strain-sheet-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(14,18,12,0);
+  z-index: 105;
+  display: none;
+  pointer-events: none;
+  transition: background 0.28s ease;
+  overscroll-behavior: contain;
+}
+.strain-sheet-backdrop.open {
+  display: block;
+  pointer-events: auto;
+  background: rgba(14,18,12,0.58);
+}
+.strain-sheet {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  background: var(--cream);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  max-height: 88dvh;
+  display: flex;
+  flex-direction: column;
+  overscroll-behavior: contain;
+  box-shadow: var(--shadow-xl);
+  transform: translateY(100%);
+  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.strain-sheet-backdrop.open .strain-sheet { transform: translateY(0); }
+
+.strain-sheet .modal-close { z-index: 3; }
+
+.strain-sheet-loading {
+  padding: 3rem 1.4rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.strain-sheet-head {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 0.85rem;
+  align-items: center;
+  padding: 1.2rem 1.4rem 0.9rem;
+  border-bottom: 1px solid var(--border-light);
+}
+.strain-sheet-thumb {
+  width: 64px; height: 64px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--bg-alt);
+  display: flex; align-items: center; justify-content: center;
+}
+.strain-sheet-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.strain-sheet-fallback { font-size: 1.8rem; }
+.strain-sheet-name {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.2rem;
+  line-height: 1.2;
+  color: var(--text);
+}
+.strain-sheet-price {
+  margin-top: 0.2rem;
+  font-weight: 700;
+  color: var(--amber);
+  font-size: 0.95rem;
+}
+
+.strain-sheet-body {
+  padding: 1rem 1.4rem 0.5rem;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.strain-section-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+  font-weight: 700;
+  margin-bottom: 0.55rem;
+}
+
+.strain-tab-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+.strain-tab {
+  background: transparent;
+  border: 1.5px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 50px;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  min-height: 36px;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.strain-tab.active {
+  background: var(--green-dark);
+  border-color: var(--green-dark);
+  color: var(--green-leaf);
+}
+
+.strain-list { display: flex; flex-direction: column; gap: 0.8rem; }
+.strain-group { display: flex; flex-direction: column; gap: 0.35rem; }
+.strain-group-header {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0.2rem 0 0.1rem;
+  letter-spacing: 0.01em;
+}
+
+.strain-option {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  background: var(--white);
+  border: 1.5px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 0.95rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text);
+  text-align: left;
+  min-height: 52px;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.05s ease;
+}
+.strain-option:active { transform: scale(0.99); }
+.strain-radio {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  flex: 0 0 18px;
+  background: var(--white);
+  position: relative;
+}
+.strain-option.selected {
+  border-color: var(--green-mid);
+  background: rgba(184,212,144,0.18);
+  box-shadow: 0 0 0 3px rgba(55,92,59,0.12);
+}
+.strain-option.selected .strain-radio {
+  border-color: var(--green-dark);
+  background: var(--green-dark);
+}
+.strain-option.selected .strain-radio::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--green-leaf);
+}
+.strain-option-name { flex: 1 1 auto; }
+.strain-option.sold-out {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--bg-alt);
+}
+.strain-option.sold-out .strain-option-name { text-decoration: line-through; }
+.strain-soldout-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--danger);
+  border: 1px solid rgba(176,52,30,0.35);
+  border-radius: 50px;
+  padding: 0.2rem 0.5rem;
+  background: rgba(176,52,30,0.08);
+}
+
+.strain-empty {
+  padding: 1.4rem;
+  text-align: center;
+  color: var(--text-light);
+  font-size: 0.9rem;
+}
+
+.strain-sheet-footer {
+  border-top: 1px solid var(--border-light);
+  padding: 0.85rem 1.4rem 1rem;
+  background: var(--cream);
+}
+.strain-qty-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.7rem;
+}
+.strain-qty-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.strain-qty-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: rgba(14,28,16,0.07);
+  border-radius: 50px;
+  padding: 0.3rem 0.6rem;
+}
+.strain-qty-btn {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: var(--white);
+  color: var(--green-dark);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+.strain-qty-btn:active { transform: translateY(1px); }
+.strain-qty-value {
+  min-width: 22px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.strain-add-btn {
+  width: 100%;
+  border: none;
+  border-radius: 50px;
+  padding: 1rem 1.2rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  min-height: 54px;
+  background: var(--green-dark);
+  color: var(--green-leaf);
+  box-shadow: 0 4px 0 rgba(0,0,0,0.30), 0 6px 20px rgba(25,45,30,0.35);
+  transform: translateY(0);
+  transition: transform 0.1s ease, box-shadow 0.1s ease, opacity 0.15s ease;
+}
+.strain-add-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.30), 0 4px 12px rgba(25,45,30,0.30);
+}
+.strain-add-btn.disabled,
+.strain-add-btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.20);
+  pointer-events: none;
+}

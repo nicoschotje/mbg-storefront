@@ -64,8 +64,22 @@ export function freeDeliveryEnabled() {
   return ss?.free_delivery_enabled !== false; // default ON if column missing/null
 }
 
+// Price helper — variants may override the parent price.
+export function priceForItem(item) {
+  if (item?.variant && item.variant.price_override != null) {
+    return Number(item.variant.price_override) || 0;
+  }
+  return Number(item?.product?.price || 0);
+}
+
+// Display name helper — "Exhale 1g — Blue Dream" for variants, parent name otherwise.
+export function displayNameForItem(item) {
+  if (item?.variant?.name) return `${item.product.name} — ${item.variant.name}`;
+  return item?.product?.name || '';
+}
+
 export function getSubtotal() {
-  return getCartItems().reduce((s,i) => s + Number(i.product.price||0) * i.qty, 0);
+  return getCartItems().reduce((s,i) => s + priceForItem(i) * i.qty, 0);
 }
 
 export function getDiscount() {
@@ -74,15 +88,21 @@ export function getDiscount() {
 }
 
 // ── Mutations ────────────────────────────────────────────────
-export function addToCart(product, qty = 1) {
+// `variant` is optional. When present, the same parent product can sit in
+// the cart multiple times under different cart keys (one per variant), so
+// the cart key is composite: `<parent_id>_<variant_id>`. For plain products
+// the key stays equal to product.id, preserving every existing call site.
+export function addToCart(product, qty = 1, variant = null) {
   if (!product || !product.id) return;
-  if (!_cart[product.id]) _cart[product.id] = { product, qty: 0 };
-  _cart[product.id].qty = Math.max(0, (_cart[product.id].qty || 0) + qty);
-  if (_cart[product.id].qty === 0) delete _cart[product.id];
+  const cartKey = variant ? `${product.id}_${variant.id}` : product.id;
+  if (!_cart[cartKey]) _cart[cartKey] = { product, qty: 0, variant: variant || null };
+  _cart[cartKey].qty = Math.max(0, (_cart[cartKey].qty || 0) + qty);
+  if (_cart[cartKey].qty === 0) delete _cart[cartKey];
   persistCart(); // snapshot to localStorage so a refresh doesn't wipe the bag
   emit();
   if (qty > 0) {
-    showToast(`${product.name} added to bag`);
+    const label = variant ? `${product.name} — ${variant.name}` : product.name;
+    showToast(`${label} added to bag`);
     // Pulse the cart count badge — tactile feedback
     const badge = document.getElementById('cartCountHeader');
     if (badge && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -225,21 +245,24 @@ function renderCartDrawer(drawer) {
                 <div class="cart-empty-icon">🛍️</div>
                 <div class="cart-empty-text">Your bag is empty</div>
               </div>`
-          : items.map(it => `
-            <div class="cart-row" data-id="${esc(it.product.id)}">
+          : items.map(it => {
+            const key = it.variant ? `${it.product.id}_${it.variant.id}` : it.product.id;
+            return `
+            <div class="cart-row" data-id="${esc(key)}">
               <div class="cart-row-img">${it.product.image_url || it.product.image
                 ? `<img src="${esc(it.product.image_url || it.product.image)}" alt=""/>`
                 : `<div class="cart-row-fallback">${esc(it.product.emoji || '🌿')}</div>`}</div>
               <div class="cart-row-mid">
-                <div class="cart-row-name">${esc(it.product.name)}</div>
-                <div class="cart-row-price">${esc(formatPrice(it.product.price))}</div>
+                <div class="cart-row-name">${esc(displayNameForItem(it))}</div>
+                <div class="cart-row-price">${esc(formatPrice(priceForItem(it)))}</div>
               </div>
               <div class="cart-qty">
-                <button class="qb minus" data-id="${esc(it.product.id)}">−</button>
+                <button class="qb minus" data-id="${esc(key)}">−</button>
                 <span class="qn">${it.qty}</span>
-                <button class="qb plus" data-id="${esc(it.product.id)}">+</button>
+                <button class="qb plus" data-id="${esc(key)}">+</button>
               </div>
-            </div>`).join('')}
+            </div>`;
+          }).join('')}
       </div>
 
       ${items.length > 0 ? `
@@ -265,10 +288,12 @@ function renderCartDrawer(drawer) {
 
   drawer.querySelector('.cart-close')?.addEventListener('click', () => closeCart(drawer));
   drawer.querySelectorAll('.qb.plus').forEach(b => b.addEventListener('click', () => {
-    const id = b.dataset.id; if (_cart[id]) addToCart(_cart[id].product, 1);
+    const key = b.dataset.id; const entry = _cart[key];
+    if (entry) addToCart(entry.product, 1, entry.variant || null);
   }));
   drawer.querySelectorAll('.qb.minus').forEach(b => b.addEventListener('click', () => {
-    const id = b.dataset.id; if (_cart[id]) addToCart(_cart[id].product, -1);
+    const key = b.dataset.id; const entry = _cart[key];
+    if (entry) addToCart(entry.product, -1, entry.variant || null);
   }));
   const applyBtn = drawer.querySelector('#applyPromoBtn');
   applyBtn?.addEventListener('click', () => {

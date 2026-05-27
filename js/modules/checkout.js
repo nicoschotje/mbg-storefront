@@ -5,7 +5,7 @@ import { sb, logActivity } from '../core/supabase.js';
 import { esc, formatPrice, normalisePhone, isValidPHPhone, openOverlay, closeOverlay, showToast } from '../core/utils.js';
 import { EDGE_URL, SUPABASE_ANON, PAYMENT_METHODS } from '../core/config.js';
 import { getStoreSettings } from './banners.js?v=20260518-mobile';
-import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo } from './cart.js?v=20260520-iphone-fix';
+import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo, priceForItem, displayNameForItem } from './cart.js?v=20260520-iphone-fix';
 import { getSession, getAuthPhone } from '../core/auth.js?v=20260520-polish';
 import { getSelectedCoords } from './address.js?v=20260520-polish';
 import { initAddressMap } from './leaflet-map.js?v=20260519-leaflet';
@@ -240,8 +240,8 @@ function renderCheckout(host, session) {
         <h3>Order summary</h3>
         <div class="summary-list">
           ${items.map(it => `<div class="sum-row">
-            <span>${esc(it.product.name)} × ${it.qty}</span>
-            <b>${esc(formatPrice(it.product.price * it.qty))}</b>
+            <span>${esc(displayNameForItem(it))} × ${it.qty}</span>
+            <b>${esc(formatPrice(priceForItem(it) * it.qty))}</b>
           </div>`).join('')}
         </div>
         <div class="summary-totals">
@@ -490,11 +490,28 @@ async function placeOrder(host) {
       payment_method:   _selectedPay,
       receipt_url:      receiptUrl,
       notes:            notes || null,
-      items: items.map(({ product: p, qty }) => ({
-        id: p.id, name: p.name, emoji: p.emoji || '🌿',
-        price: Number(p.price), qty, quantity: qty,
-        image_url: p.image_url || p.image || null
-      }))
+      // `id` MUST be the parent product UUID — the place_customer_order RPC
+      // locks/decrements that row's stock. variant_id / variant_name ride
+      // along inside the items jsonb so the order record preserves the chosen
+      // strain for fulfilment and history.
+      items: items.map(it => {
+        const p = it.product;
+        const v = it.variant || null;
+        const linePrice = priceForItem(it);
+        return {
+          id: p.id,
+          product_id: p.id,
+          name: p.name,
+          variant_id: v ? v.id : null,
+          variant_name: v ? v.name : null,
+          display_name: displayNameForItem(it),
+          emoji: p.emoji || '🌿',
+          price: Number(linePrice),
+          qty: it.qty,
+          quantity: it.qty,
+          image_url: p.image_url || p.image || null
+        };
+      })
     };
 
     // Attach delivery coordinates only if the customer picked a Nominatim
@@ -638,7 +655,7 @@ export function showSuccessScreen(orderNum, items, total, phone) {
     host.className = 'success-screen';
     document.body.appendChild(host);
   }
-  const summary = items.map(i => `${i.product.emoji || '🌿'} ${i.product.name} ×${i.qty}`).join(', ');
+  const summary = items.map(i => `${i.product.emoji || '🌿'} ${displayNameForItem(i)} ×${i.qty}`).join(', ');
   host.innerHTML = `
     <div class="success-card">
       <div class="success-icon">&#10003;</div>

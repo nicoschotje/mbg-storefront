@@ -6,6 +6,7 @@ import { esc, formatPrice, openOverlay, closeOverlay } from '../core/utils.js';
 import { renderCategoryBanner } from './banners.js?v=20260518-mobile';
 import { addToCart } from './cart.js?v=20260520-iphone-fix';
 import { openRestockModal } from './restock.js?v=20260518-mobile';
+import { openStrainPicker } from './strain-picker.js?v=20260526-variants';
 
 let _products = [];
 let _categories = [];
@@ -44,8 +45,49 @@ export async function loadCategories() {
 
 export async function loadProducts() {
   try {
-    const { data } = await sb().from('products').select('*').eq('is_active', true);
-    _products = (data || []).sort((a, b) => {
+    // Fetch active products + available variants in parallel. Variants drive
+    // both (a) the per-parent strain count badge and (b) the filter that
+    // removes legacy "Parent — Strain" individual products from the grid
+    // once a real parent (has_variants=true) takes over.
+    const [productsRes, variantsRes] = await Promise.all([
+      sb().from('products').select('*').eq('is_active', true),
+      sb().from('product_variants').select('parent_product_id,is_available').eq('is_available', true)
+    ]);
+    const all = productsRes.data || [];
+    const variants = variantsRes.data || [];
+
+    // Active parent product names. A "parent" is has_variants=true AND active.
+    const activeParentNames = new Set(
+      all.filter(p => p.has_variants === true).map(p => p.name)
+    );
+
+    // Tally available variant counts by parent_product_id for the badge.
+    const variantCountByParent = {};
+    for (const v of variants) {
+      if (!v.parent_product_id) continue;
+      variantCountByParent[v.parent_product_id] = (variantCountByParent[v.parent_product_id] || 0) + 1;
+    }
+
+    // Strip out the old individual-variant products ("Parent — Strain") when
+    // their parent is in the grid as a has_variants=true product. They'll be
+    // surfaced inside the strain picker instead.
+    const filtered = all.filter(p => {
+      if (p.has_variants === true) return true; // always keep parents
+      const m = /\s—\s/.test(p.name || '');
+      if (!m) return true;
+      const parentPart = (p.name || '').split(/\s—\s/)[0].trim();
+      return !activeParentNames.has(parentPart);
+    });
+
+    // Attach the variant count so productCardHtml can render the strain badge
+    // without an extra round-trip per card.
+    for (const p of filtered) {
+      if (p.has_variants === true) {
+        p._variantCount = variantCountByParent[p.id] || 0;
+      }
+    }
+
+    _products = filtered.sort((a, b) => {
       if (!!b.is_featured !== !!a.is_featured) return b.is_featured ? 1 : -1;
       if (!!b.is_hot_deal !== !!a.is_hot_deal) return b.is_hot_deal ? 1 : -1;
       return (a.name || '').localeCompare(b.name || '');
@@ -110,12 +152,17 @@ export function renderProductSections(targetEl, banners = []) {
   targetEl.innerHTML = html;
   targetEl.querySelectorAll('.product-card').forEach(card => {
     card.addEventListener('click', (e) => {
-      if (e.target.closest('.product-add-btn') || e.target.closest('.notify-btn')) return;
+      if (e.target.closest('.product-add-btn') || e.target.closest('.notify-btn') || e.target.closest('.choose-strain-btn')) return;
+      const p = _products.find(x => x.id === card.dataset.id);
+      if (p && p.has_variants === true) { openStrainPicker(p); return; }
       openProductModal(card.dataset.id);
     });
   });
   targetEl.querySelectorAll('.product-add-btn').forEach(b => {
     b.addEventListener('click', (e) => { e.stopPropagation(); const p = _products.find(x => x.id === b.dataset.id); if (p) addToCart(p, 1); });
+  });
+  targetEl.querySelectorAll('.choose-strain-btn').forEach(b => {
+    b.addEventListener('click', (e) => { e.stopPropagation(); const p = _products.find(x => x.id === b.dataset.id); if (p) openStrainPicker(p); });
   });
   targetEl.querySelectorAll('.notify-btn').forEach(b => {
     b.addEventListener('click', (e) => { e.stopPropagation(); const p = _products.find(x => x.id === b.dataset.id); if (p) openRestockModal(p); });
@@ -138,16 +185,32 @@ function productMatchesCat(p, cat) {
 
 function productCardHtml(p, isWide=false) {
   const img = p.image_url || p.image || '';
-  const stock = p.stock_qty ?? p.stock ?? null;
-  const inStock = stock === null || stock > 0;
   const type = p.type || p.strain_type || p.category || '';
   const name = p.name || 'Untitled';
-  return `<article class="product-card${isWide?' product-card-wide':''}" data-id="${esc(p.id)}"><div class="product-img-wrap">${img ? `<img src="${esc(img)}" alt="${esc(name)}" loading="lazy"/>` : `<div class="product-img-placeholder">${esc(p.emoji || '🌿')}</div>`}${type ? `<span class="type-chip">${esc(type)}</span>` : ''}<span class="price-badge">${esc(formatPrice(p.price))}</span></div><div class="product-info"><h3 class="product-name">${esc(name)}</h3>${p.subtitle ? `<div class="product-sub">${esc(p.subtitle)}</div>` : ''}<div class="product-footer">${inStock ? `<button type="button" class="product-add-btn" data-id="${esc(p.id)}">+ Add</button>` : `<button type="button" class="notify-btn" data-id="${esc(p.id)}">Notify Me</button>`}</div></div></article>`;
+  const hasVariants = p.has_variants === true;
+  const variantCount = Number(p._variantCount) || 0;
+  // Parent-with-variants cards short-circuit the stock check — a parent is a
+  // virtual grouping row whose own stock_qty stays 0; the real stock lives
+  // on the individual variants. Stock only gates the +Add / Notify Me path
+  // for plain (non-variant) products.
+  let footer;
+  if (hasVariants) {
+    footer = `<span class="variant-count-pill">${variantCount} strain${variantCount === 1 ? '' : 's'} available</span>
+       <button type="button" class="choose-strain-btn" data-id="${esc(p.id)}">Choose Strain</button>`;
+  } else {
+    const stock = p.stock_qty ?? p.stock ?? null;
+    const inStock = stock === null || stock > 0;
+    footer = inStock
+      ? `<button type="button" class="product-add-btn" data-id="${esc(p.id)}">+ Add</button>`
+      : `<button type="button" class="notify-btn" data-id="${esc(p.id)}">Notify Me</button>`;
+  }
+  return `<article class="product-card${isWide?' product-card-wide':''}${hasVariants?' product-card-variants':''}" data-id="${esc(p.id)}"><div class="product-img-wrap">${img ? `<img src="${esc(img)}" alt="${esc(name)}" loading="lazy"/>` : `<div class="product-img-placeholder">${esc(p.emoji || '🌿')}</div>`}${type ? `<span class="type-chip">${esc(type)}</span>` : ''}<span class="price-badge">${esc(formatPrice(p.price))}</span></div><div class="product-info"><h3 class="product-name">${esc(name)}</h3>${p.subtitle ? `<div class="product-sub">${esc(p.subtitle)}</div>` : ''}<div class="product-footer">${footer}</div></div></article>`;
 }
 
 export function openProductModal(productId) {
   const p = _products.find(x => x.id === productId);
   if (!p) return;
+  if (p.has_variants === true) { openStrainPicker(p); return; }
   const stock = p.stock_qty ?? p.stock ?? null;
   const inStock = stock === null || stock > 0;
   const img = p.image_url || p.image || '';
