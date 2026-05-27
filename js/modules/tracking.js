@@ -182,11 +182,17 @@ function renderOrders(list, orders) {
     // order_status is the source of truth (kept in sync by a DB trigger).
     const status = o.order_status || 'pending';
     const updatedTs = o.status_updated_at || o.created_at;
+    const note = (o.delivery_notes || '').trim();
+    const noteHtml = note ? `<div class="ord-note">
+        <div class="ord-note-label">📦 Message from the store:</div>
+        <div class="ord-note-body">${esc(note)}</div>
+      </div>` : '';
     return `<article class="ord-card status-${esc(status)}">
       <header>
         <span class="ord-num">#${esc(o.order_number || (o.id || '').slice(0,8))}</span>
         <span class="ord-badge">${esc(STATUS_LABELS[status] || status)}</span>
       </header>
+      ${noteHtml}
       <div class="ord-summary">${esc(summary)}</div>
       <footer>
         <span class="ord-total">${esc(formatPrice(o.total||0))}</span>
