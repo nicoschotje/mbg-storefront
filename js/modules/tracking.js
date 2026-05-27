@@ -36,7 +36,12 @@ function scopedClient(phone) {
   return _scoped;
 }
 
-// Same SELECT used by the initial load and every poll tick.
+// Same SELECT used by the initial load and every poll tick. select('*')
+// already returns delivery_notes (the column the dashboard now writes the
+// owner's ETA / message into), so the existing 15s poll picks up changes
+// without an explicit field list. If the SELECT is ever narrowed, make sure
+// delivery_notes stays in the projection — renderOrders relies on it for
+// the "Message from the store" box.
 async function queryOrders(phone) {
   const client = scopedClient(phone);
   const { data, error } = await client.from('orders')
@@ -182,11 +187,21 @@ function renderOrders(list, orders) {
     // order_status is the source of truth (kept in sync by a DB trigger).
     const status = o.order_status || 'pending';
     const updatedTs = o.status_updated_at || o.created_at;
+    // Owner-written ETA / message from the dashboard. Render the box only
+    // when a non-empty value is present so empty orders stay clean.
+    const storeMsg = (o.delivery_notes || '').trim();
+    const storeMsgHtml = storeMsg
+      ? `<div class="ord-store-msg" role="status">
+           <div class="ord-store-msg-label">📦 Message from the store:</div>
+           <div class="ord-store-msg-body">${esc(storeMsg)}</div>
+         </div>`
+      : '';
     return `<article class="ord-card status-${esc(status)}">
       <header>
         <span class="ord-num">#${esc(o.order_number || (o.id || '').slice(0,8))}</span>
         <span class="ord-badge">${esc(STATUS_LABELS[status] || status)}</span>
       </header>
+      ${storeMsgHtml}
       <div class="ord-summary">${esc(summary)}</div>
       <footer>
         <span class="ord-total">${esc(formatPrice(o.total||0))}</span>
