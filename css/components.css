@@ -1841,3 +1841,308 @@ body.modal-open .appFooter {
   box-shadow: 0 2px 0 rgba(0,0,0,0.20);
   pointer-events: none;
 }
+
+/* ── GROUPED PRODUCT CARDS (Phase 4) ──────────────────────
+   Cards rendered for products that share a group_name. Reuses the
+   .product-card chassis — same chrome, only the footer + sub-line change. */
+.product-card-group .group-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 0.45rem;
+}
+.product-card-group .choose-group-btn {
+  flex: 1 1 auto;
+  background: var(--green-mid);
+  color: var(--green-leaf);
+  border: none;
+  border-radius: 50px;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  min-height: 44px;
+  white-space: nowrap;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.22), 0 4px 12px rgba(25,45,30,0.25);
+  transition: transform 0.1s ease, box-shadow 0.1s ease, opacity 0.15s ease;
+}
+.product-card-group .choose-group-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.22), 0 2px 8px rgba(25,45,30,0.20);
+}
+.product-card-group .choose-group-btn[disabled] {
+  background: var(--border);
+  color: var(--text-light);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.product-card-oos { opacity: 0.55; filter: grayscale(0.2); }
+
+/* ── GROUP PICKER BOTTOM SHEET (Phase 4) ──────────────────
+   Slide-up sheet for grouped products. Mirrors the strain-sheet motion
+   so the two pickers feel identical even though they back different
+   data models (real products vs. product_variants rows). */
+.group-sheet-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(14,18,12,0);
+  z-index: 105;
+  display: none;
+  pointer-events: none;
+  transition: background 0.28s ease;
+  overscroll-behavior: contain;
+}
+.group-sheet-backdrop.open {
+  display: block;
+  pointer-events: auto;
+  background: rgba(14,18,12,0.58);
+}
+.group-sheet {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  background: var(--cream);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  max-height: 90dvh;
+  display: flex;
+  flex-direction: column;
+  overscroll-behavior: contain;
+  box-shadow: var(--shadow-xl);
+  transform: translateY(100%);
+  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.group-sheet-backdrop.open .group-sheet { transform: translateY(0); }
+.group-sheet .modal-close { z-index: 3; }
+
+.group-sheet-hero {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  background: var(--bg-alt);
+  overflow: hidden;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+.group-sheet-hero-img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.group-sheet-hero-fallback {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 4rem;
+}
+.group-sheet-titles {
+  padding: 1rem 1.4rem 0.6rem;
+  border-bottom: 1px solid var(--border-light);
+}
+.group-sheet-name {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.35rem;
+  line-height: 1.2;
+  color: var(--text);
+}
+.group-sheet-price {
+  margin-top: 0.25rem;
+  font-weight: 700;
+  color: var(--amber);
+  font-size: 1rem;
+}
+.group-sheet-selected {
+  margin-top: 0.3rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.group-sheet-body {
+  padding: 0.9rem 1.4rem 0.5rem;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.group-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.85rem;
+}
+.group-filter-pill {
+  background: transparent;
+  border: 1.5px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 50px;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  min-height: 44px;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.group-filter-pill.active {
+  background: var(--green-dark);
+  border-color: var(--green-dark);
+  color: var(--green-leaf);
+}
+
+.group-variant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.group-variant-row {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 0.8rem;
+  align-items: center;
+  width: 100%;
+  background: var(--white);
+  border: 2px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 0.55rem 0.7rem;
+  min-height: 72px;
+  text-align: left;
+  position: relative;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.05s ease;
+}
+.group-variant-row:active { transform: scale(0.99); }
+.group-variant-row.selected {
+  border-color: #1a5c38;
+  background: rgba(184,212,144,0.20);
+  box-shadow: 0 0 0 3px rgba(26,92,56,0.12);
+}
+.group-variant-row.sold-out {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--bg-alt);
+}
+.group-variant-row.sold-out .group-variant-name {
+  text-decoration: line-through;
+}
+.group-variant-thumb {
+  width: 56px; height: 56px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--green-dark);
+  display: flex; align-items: center; justify-content: center;
+  flex: 0 0 56px;
+}
+.group-variant-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.group-variant-thumb-fallback {
+  font-size: 1.6rem;
+  color: var(--green-leaf);
+}
+.group-variant-mid {
+  display: flex; flex-direction: column; gap: 0.25rem;
+  min-width: 0;
+}
+.group-variant-name {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.group-variant-meta { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.group-variant-right {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem;
+}
+.group-variant-price {
+  font-weight: 800;
+  color: var(--amber);
+  font-size: 0.95rem;
+  font-family: var(--font-display);
+}
+.group-variant-check {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: #1a5c38;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center;
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+}
+.group-variant-oos {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--danger);
+  border: 1px solid rgba(176,52,30,0.35);
+  border-radius: 50px;
+  padding: 0.15rem 0.45rem;
+  background: rgba(176,52,30,0.08);
+}
+
+/* Strain badges (group picker + future reuse) */
+.group-strain-badge {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.5rem;
+  border-radius: 50px;
+  background: var(--bg-alt);
+  color: var(--text);
+  white-space: nowrap;
+}
+.group-strain-badge.strain-sativa        { background: #dcfce7; color: #166534; }
+.group-strain-badge.strain-indica        { background: #ede9fe; color: #5b21b6; }
+.group-strain-badge.strain-hybrid        { background: #fef9c3; color: #854d0e; }
+.group-strain-badge.strain-sativa-hybrid { background: #ccfbf1; color: #134e4a; }
+.group-strain-badge.strain-indica-hybrid { background: #fce7f3; color: #831843; }
+
+.group-empty {
+  padding: 1.4rem;
+  text-align: center;
+  color: var(--text-light);
+  font-size: 0.9rem;
+}
+
+.group-sheet-footer {
+  border-top: 1px solid var(--border-light);
+  padding: 0.85rem 1.4rem 1rem;
+  background: var(--cream);
+}
+.group-add-btn {
+  width: 100%;
+  border: none;
+  border-radius: 50px;
+  padding: 1rem 1.2rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  min-height: 54px;
+  background: var(--green-dark);
+  color: var(--green-leaf);
+  box-shadow: 0 4px 0 rgba(0,0,0,0.30), 0 6px 20px rgba(25,45,30,0.35);
+  transition: transform 0.1s ease, box-shadow 0.1s ease, opacity 0.15s ease;
+}
+.group-add-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.30), 0 4px 12px rgba(25,45,30,0.30);
+}
+.group-add-btn.disabled,
+.group-add-btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.20);
+  pointer-events: none;
+}
+
+/* Cart row — second line for the chosen strain/flavor */
+.cart-row-variant {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+.cart-row-variant-label {
+  font-weight: 700;
+  color: var(--text);
+}

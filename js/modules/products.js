@@ -7,13 +7,17 @@ import { renderCategoryBanner } from './banners.js?v=20260518-mobile';
 import { addToCart } from './cart.js?v=20260520-iphone-fix';
 import { openRestockModal } from './restock.js?v=20260518-mobile';
 import { openStrainPicker } from './strain-picker.js?v=20260526-variants';
+import { openGroupPicker } from './group-picker.js?v=20260527-groups';
 
 let _products = [];
 let _categories = [];
+let _groups = [];           // group entries derived from products.group_name
+let _displayItems = [];     // mixed list of products + group entries used by the grid
 let _activeCat = 'All';
 let _searchQuery = '';
 
 export function getProducts() { return _products; }
+export function getGroups()   { return _groups; }
 export function getCategories() { return _categories; }
 
 export function setSearchQuery(q) {
@@ -25,10 +29,17 @@ export function getSearchQuery() { return _searchQuery; }
 
 function applySearch(list) {
   if (!_searchQuery) return list;
-  return list.filter(p =>
-    (p.name || '').toLowerCase().includes(_searchQuery) ||
-    (p.description || '').toLowerCase().includes(_searchQuery)
-  );
+  return list.filter(p => {
+    if (p.__type === 'group') {
+      if ((p.group_name || '').toLowerCase().includes(_searchQuery)) return true;
+      return p.products.some(v =>
+        (v.name || '').toLowerCase().includes(_searchQuery) ||
+        (v.description || '').toLowerCase().includes(_searchQuery)
+      );
+    }
+    return (p.name || '').toLowerCase().includes(_searchQuery) ||
+      (p.description || '').toLowerCase().includes(_searchQuery);
+  });
 }
 
 export async function loadCategories() {
@@ -92,12 +103,61 @@ export async function loadProducts() {
       if (!!b.is_hot_deal !== !!a.is_hot_deal) return b.is_hot_deal ? 1 : -1;
       return (a.name || '').localeCompare(b.name || '');
     });
+    rebuildDisplay();
     cacheProductsOffline(_products);
   } catch(e) {
     console.warn('[products] load failed, trying offline cache', e);
     _products = restoreProductsOffline();
+    rebuildDisplay();
   }
   return _products;
+}
+
+// Splits _products into standalones + group entries. group_name groups products
+// that share the same label into a single visual card; the bottom-sheet picker
+// (group-picker.js) exposes the underlying variants. has_variants=true parents
+// keep their legacy strain-picker path untouched.
+function rebuildDisplay() {
+  const groupMap = new Map();
+  const standalone = [];
+  for (const p of _products) {
+    const gn = (p.group_name || '').trim();
+    if (gn && p.has_variants !== true) {
+      let g = groupMap.get(gn);
+      if (!g) {
+        g = { __type: 'group', group_name: gn, products: [] };
+        groupMap.set(gn, g);
+      }
+      g.products.push(p);
+    } else {
+      standalone.push(p);
+    }
+  }
+  _groups = [];
+  for (const g of groupMap.values()) {
+    g.products.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const first = g.products[0] || {};
+    const prices = g.products.map(p => Number(p.price) || 0);
+    g.category    = first.category || '';
+    g.category_id = first.category_id || null;
+    g.cover_image = first.image_url || first.image || '';
+    g.emoji       = first.emoji || '';
+    g.min_price   = prices.length ? Math.min(...prices) : 0;
+    g.max_price   = prices.length ? Math.max(...prices) : 0;
+    g.has_any_in_stock  = g.products.some(p => (p.stock_qty ?? p.stock ?? null) === null || (p.stock_qty ?? p.stock) > 0);
+    g.has_strain_types  = g.products.some(p => !!p.strain_type);
+    g.is_featured = g.products.some(p => !!p.is_featured);
+    g.is_hot_deal = g.products.some(p => !!p.is_hot_deal);
+    g.id          = `group:${gn}`;
+    _groups.push(g);
+  }
+  _displayItems = [...standalone, ..._groups].sort((a, b) => {
+    if (!!b.is_featured !== !!a.is_featured) return b.is_featured ? 1 : -1;
+    if (!!b.is_hot_deal !== !!a.is_hot_deal) return b.is_hot_deal ? 1 : -1;
+    const an = a.__type === 'group' ? a.group_name : a.name;
+    const bn = b.__type === 'group' ? b.group_name : b.name;
+    return (an || '').localeCompare(bn || '');
+  });
 }
 
 function cacheProductsOffline(arr) {
@@ -126,24 +186,30 @@ export function renderCategoryNav(targetEl, onChange) {
   });
 }
 
+function renderItemCard(item, isWide=false) {
+  return item.__type === 'group' ? groupCardHtml(item, isWide) : productCardHtml(item, isWide);
+}
+
+function findGroupByKey(key) { return _groups.find(g => g.id === key); }
+
 export function renderProductSections(targetEl, banners = []) {
   if (!targetEl) return;
-  if (!_products.length) {
+  if (!_displayItems.length) {
     targetEl.innerHTML = '<div class="empty">No products available right now. Please check back soon.</div>';
     return;
   }
   let html = '';
   const cats = _activeCat === 'All' ? _categories : _categories.filter(c => c.name === _activeCat);
   if (!cats.length) {
-    html += '<div class="category-section" data-cat="All"><div class="product-grid">' + applySearch(_products).map(productCardHtml).join('') + '</div></div>';
+    html += '<div class="category-section" data-cat="All"><div class="product-grid">' + applySearch(_displayItems).map(p => renderItemCard(p)).join('') + '</div></div>';
   } else {
     cats.forEach(cat => {
-      const list = applySearch(_products.filter(p => productMatchesCat(p, cat)));
+      const list = applySearch(_displayItems.filter(p => productMatchesCat(p, cat)));
       if (!list.length && _activeCat === 'All') return;
       const isWide = /dab|concentr/i.test(cat.name);
       const banner = banners.find(b => b.category_name === cat.name) || null;
       const emptyMsg = _searchQuery ? 'No products found' : 'Nothing in this collection yet.';
-      html += `<div class="category-section" data-cat="${esc(cat.name)}">${renderCategoryBanner(cat, banner)}<div class="product-grid${isWide?' product-grid-wide':''}">${list.map(p => productCardHtml(p, isWide)).join('') || `<div class="empty">${emptyMsg}</div>`}</div></div>`;
+      html += `<div class="category-section" data-cat="${esc(cat.name)}">${renderCategoryBanner(cat, banner)}<div class="product-grid${isWide?' product-grid-wide':''}">${list.map(p => renderItemCard(p, isWide)).join('') || `<div class="empty">${emptyMsg}</div>`}</div></div>`;
     });
   }
   if (!html && _searchQuery) {
@@ -152,7 +218,12 @@ export function renderProductSections(targetEl, banners = []) {
   targetEl.innerHTML = html;
   targetEl.querySelectorAll('.product-card').forEach(card => {
     card.addEventListener('click', (e) => {
-      if (e.target.closest('.product-add-btn') || e.target.closest('.notify-btn') || e.target.closest('.choose-strain-btn')) return;
+      if (e.target.closest('.product-add-btn') || e.target.closest('.notify-btn') || e.target.closest('.choose-strain-btn') || e.target.closest('.choose-group-btn')) return;
+      if (card.dataset.group === '1') {
+        const g = findGroupByKey(card.dataset.id);
+        if (g && g.has_any_in_stock) openGroupPicker(g);
+        return;
+      }
       const p = _products.find(x => x.id === card.dataset.id);
       if (p && p.has_variants === true) { openStrainPicker(p); return; }
       openProductModal(card.dataset.id);
@@ -163,6 +234,9 @@ export function renderProductSections(targetEl, banners = []) {
   });
   targetEl.querySelectorAll('.choose-strain-btn').forEach(b => {
     b.addEventListener('click', (e) => { e.stopPropagation(); const p = _products.find(x => x.id === b.dataset.id); if (p) openStrainPicker(p); });
+  });
+  targetEl.querySelectorAll('.choose-group-btn').forEach(b => {
+    b.addEventListener('click', (e) => { e.stopPropagation(); const g = findGroupByKey(b.dataset.id); if (g) openGroupPicker(g); });
   });
   targetEl.querySelectorAll('.notify-btn').forEach(b => {
     b.addEventListener('click', (e) => { e.stopPropagation(); const p = _products.find(x => x.id === b.dataset.id); if (p) openRestockModal(p); });
@@ -181,6 +255,30 @@ function productMatchesCat(p, cat) {
   if (p.category_id && cat.id && p.category_id === cat.id) return true;
   const pcat = (p.category || p.category_name || '').toLowerCase();
   return pcat !== '' && pcat === String(cat.name).toLowerCase();
+}
+
+export function chooseLabelForCategory(category) {
+  const c = (category || '').toLowerCase();
+  if (c === 'vape' || c === 'flowers') return 'Choose Strain';
+  if (c === 'edibles') return 'Choose Flavor';
+  return 'Choose Option';
+}
+
+function priceRangeText(min, max) {
+  return min === max ? formatPrice(min) : `${formatPrice(min)} – ${formatPrice(max)}`;
+}
+
+function groupCardHtml(g, isWide=false) {
+  const img   = g.cover_image || '';
+  const count = g.products.length;
+  const subtitle = g.has_strain_types
+    ? `${count} strain${count === 1 ? '' : 's'} available`
+    : `${count} option${count === 1 ? '' : 's'} available`;
+  const outOfStock = !g.has_any_in_stock;
+  const btn = outOfStock
+    ? `<button type="button" class="choose-group-btn" data-id="${esc(g.id)}" disabled>Out of Stock</button>`
+    : `<button type="button" class="choose-group-btn" data-id="${esc(g.id)}">${esc(chooseLabelForCategory(g.category))}</button>`;
+  return `<article class="product-card product-card-group${isWide?' product-card-wide':''}${outOfStock?' product-card-oos':''}" data-id="${esc(g.id)}" data-group="1"><div class="product-img-wrap">${img ? `<img src="${esc(img)}" alt="${esc(g.group_name)}" loading="lazy"/>` : `<div class="product-img-placeholder">${esc(g.emoji || '🌿')}</div>`}<span class="price-badge">${esc(priceRangeText(g.min_price, g.max_price))}</span></div><div class="product-info"><h3 class="product-name">${esc(g.group_name)}</h3><div class="product-sub group-sub">${esc(subtitle)}</div><div class="product-footer">${btn}</div></div></article>`;
 }
 
 function productCardHtml(p, isWide=false) {

@@ -78,6 +78,12 @@ export function displayNameForItem(item) {
   return item?.product?.name || '';
 }
 
+// "Strain" for vape/flowers, "Flavor" for edibles. Used for cart line metadata.
+function variantMetaLabel(item) {
+  const cat = (item?.product?.category || '').toLowerCase();
+  return cat === 'edibles' ? 'Flavor' : 'Strain';
+}
+
 export function getSubtotal() {
   return getCartItems().reduce((s,i) => s + priceForItem(i) * i.qty, 0);
 }
@@ -247,13 +253,16 @@ function renderCartDrawer(drawer) {
               </div>`
           : items.map(it => {
             const key = it.variant ? `${it.product.id}_${it.variant.id}` : it.product.id;
+            const variantName = it.variant?.name || '';
+            const metaLabel   = variantMetaLabel(it);
             return `
             <div class="cart-row" data-id="${esc(key)}">
               <div class="cart-row-img">${it.product.image_url || it.product.image
                 ? `<img src="${esc(it.product.image_url || it.product.image)}" alt=""/>`
                 : `<div class="cart-row-fallback">${esc(it.product.emoji || '🌿')}</div>`}</div>
               <div class="cart-row-mid">
-                <div class="cart-row-name">${esc(displayNameForItem(it))}</div>
+                <div class="cart-row-name">${esc(it.product.name || '')}</div>
+                ${variantName ? `<div class="cart-row-variant"><span class="cart-row-variant-label">${esc(metaLabel)}:</span> ${esc(variantName)}</div>` : ''}
                 <div class="cart-row-price">${esc(formatPrice(priceForItem(it)))}</div>
               </div>
               <div class="cart-qty">
