@@ -54,6 +54,24 @@ export async function loadCategories() {
   return _categories;
 }
 
+// String coercion that never throws — many of the grouping/sort callbacks
+// chain string methods on column values; if any column comes back as a
+// number or boolean we still want the catalogue to render.
+function s(v) { return v == null ? '' : String(v); }
+
+// Rebuild the display list with a safety net: if grouping ever throws on
+// unexpected data, log the actual error and fall back to a flat list so
+// the catalogue still shows up.
+function safeRebuildDisplay() {
+  try {
+    rebuildDisplay();
+  } catch (err) {
+    console.error('[products] grouping failed:', err);
+    _groups = [];
+    _displayItems = [..._products];
+  }
+}
+
 export async function loadProducts() {
   try {
     // Fetch active products + available variants in parallel. Variants drive
@@ -77,8 +95,8 @@ export async function loadProducts() {
     // group card supersedes the legacy radio-picker parent.
     const groupedNames = new Set(
       all
-        .filter(p => p.has_variants !== true && (p.group_name || '').trim())
-        .map(p => p.group_name.trim())
+        .filter(p => p.has_variants !== true && s(p.group_name).trim())
+        .map(p => s(p.group_name).trim())
     );
 
     // Tally available variant counts by parent_product_id for the badge.
@@ -98,13 +116,14 @@ export async function loadProducts() {
     //     an active has_variants=true product.
     const filtered = all.filter(p => {
       if (p.has_variants === true) {
-        if (groupedNames.has((p.name || '').trim())) return false;
+        if (groupedNames.has(s(p.name).trim())) return false;
         return true;
       }
-      if ((p.group_name || '').trim()) return true;
-      const m = /\s—\s/.test(p.name || '');
+      if (s(p.group_name).trim()) return true;
+      const name = s(p.name);
+      const m = /\s—\s/.test(name);
       if (!m) return true;
-      const parentPart = (p.name || '').split(/\s—\s/)[0].trim();
+      const parentPart = name.split(/\s—\s/)[0].trim();
       return !activeParentNames.has(parentPart);
     });
 
@@ -121,21 +140,15 @@ export async function loadProducts() {
       if (!!b.is_hot_deal !== !!a.is_hot_deal) return b.is_hot_deal ? 1 : -1;
       return s(a.name).localeCompare(s(b.name));
     });
-    rebuildDisplay();
+    safeRebuildDisplay();
     cacheProductsOffline(_products);
   } catch(e) {
     console.warn('[products] load failed, trying offline cache', e);
     _products = restoreProductsOffline();
-    rebuildDisplay();
+    safeRebuildDisplay();
   }
   return _products;
 }
-
-// String coercion that never throws — many of the grouping/sort callbacks
-// chain string methods on column values; if any column ever comes back as
-// a number or boolean (admin tooling, migration in flight) we still want
-// the catalogue to render instead of taking down the whole page.
-function s(v) { return v == null ? '' : String(v); }
 
 // Splits _products into standalones + group entries. group_name groups products
 // that share the same label into a single visual card; the bottom-sheet picker
@@ -159,7 +172,8 @@ function rebuildDisplay() {
   }
   _groups = [];
   for (const g of groupMap.values()) {
-    g.products.sort((a, b) => s(a.name).localeCompare(s(b.name)));
+    g.products = g.products.filter(Boolean);   // null check — defend against stray null/undefined entries
+    g.products.sort((a, b) => s(a && a.name).localeCompare(s(b && b.name)));
     const first = g.products[0] || {};
     const prices = g.products.map(p => Number(p.price) || 0);
     g.category    = s(first.category);
