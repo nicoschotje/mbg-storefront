@@ -1,13 +1,12 @@
 /* MBG Storefront v2 — Group Picker bottom sheet (Phase 4)
  *
- * Opens for "grouped products" — distinct products that share the same
- * group_name. Unlike the legacy strain-picker (which reads from
- * product_variants for has_variants=true parents), every option here is a
- * real products-row with its own image, price, and stock. The top hero
- * image swaps to the selected variant's image_url so the customer sees
- * exactly what they're picking.
+ * Slide-up sheet for products that share a group_name. Uses partial DOM
+ * mutation (per the agreed spec) so taps swap the hero image, price line,
+ * "Selected:" text, and CTA without rebuilding the variant list.
  *
- * Lives alongside the legacy openStrainPicker — neither calls the other.
+ * Public API: openGroupPicker(group, options?) — options.onAdd(selected)
+ * lets the legacy has_variants strain-picker hand-off the cart payload
+ * with the original parent product so cart keys stay stable.
  */
 import { esc, formatPrice, openOverlay, closeOverlay } from '../core/utils.js';
 import { addToCart } from './cart.js?v=20260520-iphone-fix';
@@ -22,218 +21,202 @@ const STRAIN_LABELS = {
 const STRAIN_ORDER = ['sativa', 'indica', 'hybrid', 'sativa hybrid', 'indica hybrid'];
 
 function normStrain(s) { return (s || '').toLowerCase().trim(); }
+function strainSlug(s) { return normStrain(s).replace(/\s+/g, '-'); }
 
-function selectVerbForCategory(category) {
+function pickVerb(category) {
   return (category || '').toLowerCase() === 'edibles' ? 'flavor' : 'strain';
 }
 
-// options.onAdd(selectedProduct) lets callers override the cart payload. The
-// legacy has_variants strain-picker uses this hook to keep the original
-// (parent, variant) shape so cart keys stay stable across the two pickers.
+function priceRangeText(min, max) {
+  return min === max
+    ? formatPrice(min)
+    : `${formatPrice(min)} – ${formatPrice(max)}`;
+}
+
 export function openGroupPicker(group, options = {}) {
   if (!group?.products?.length) return;
 
-  let host = document.getElementById('groupSheet');
+  let host = document.getElementById('group-picker-overlay');
   if (!host) {
     host = document.createElement('div');
-    host.id = 'groupSheet';
-    host.className = 'group-sheet-backdrop';
+    host.id = 'group-picker-overlay';
     document.body.appendChild(host);
   }
-
-  requestAnimationFrame(() => host.classList.add('open'));
-  openOverlay('groupSheet', () => closeGroupPicker());
-  host.addEventListener('click', backdropHandler);
-
   renderSheet(host, group, options);
+  requestAnimationFrame(() => host.classList.add('open'));
+  openOverlay('group-picker-overlay', () => closeGroupPicker());
+  host.addEventListener('click', backdropHandler);
 }
 
 function backdropHandler(e) {
-  if (e.target.id === 'groupSheet') closeGroupPicker();
+  if (e.target.id === 'group-picker-overlay') closeGroupPicker();
 }
 
 export function closeGroupPicker() {
-  const host = document.getElementById('groupSheet');
+  const host = document.getElementById('group-picker-overlay');
   if (!host) return;
   host.classList.remove('open');
-  closeOverlay('groupSheet');
+  closeOverlay('group-picker-overlay');
   host.removeEventListener('click', backdropHandler);
   setTimeout(() => { if (host && !host.classList.contains('open')) host.innerHTML = ''; }, 320);
 }
 
-function renderSheet(host, group, options = {}) {
-  let selectedId = null;
-  let activeFilter = 'all';
-  const verb = selectVerbForCategory(group.category);
+function renderSheet(host, group, options) {
+  const verb = pickVerb(group.category);
 
-  // Filter pills only show strain types that actually appear in this group.
   const presentTypes = new Set(
-    group.products
-      .map(p => normStrain(p.strain_type))
-      .filter(t => STRAIN_LABELS[t])
+    group.products.map(p => normStrain(p.strain_type)).filter(t => STRAIN_LABELS[t])
   );
-  const filters = ['all', ...STRAIN_ORDER.filter(t => presentTypes.has(t))];
+  const filterOrder = ['all', ...STRAIN_ORDER.filter(t => presentTypes.has(t))];
   const showFilters = group.has_strain_types;
 
-  function selected() { return group.products.find(p => p.id === selectedId) || null; }
+  const initialPrice = priceRangeText(group.min_price, group.max_price);
 
-  function visibleProducts() {
-    if (activeFilter === 'all') return group.products;
-    return group.products.filter(p => normStrain(p.strain_type) === activeFilter);
-  }
-
-  function heroImage() {
-    const sel = selected();
-    if (sel && (sel.image_url || sel.image)) return sel.image_url || sel.image;
-    return group.cover_image || '';
-  }
-
-  function priceText() {
-    const sel = selected();
-    if (sel) return formatPrice(Number(sel.price) || 0);
-    return group.min_price === group.max_price
-      ? formatPrice(group.min_price)
-      : `${formatPrice(group.min_price)} – ${formatPrice(group.max_price)}`;
-  }
-
-  function ctaState() {
-    const sel = selected();
-    if (!sel) {
-      return { disabled: true, label: `Select a ${verb} first` };
-    }
-    const stock = sel.stock_qty ?? sel.stock ?? null;
-    const inStock = stock === null || stock > 0;
-    if (!inStock) return { disabled: true, label: 'Out of Stock' };
-    return { disabled: false, label: `Add to Cart · ${formatPrice(Number(sel.price) || 0)}` };
-  }
-
-  function renderFilterPills() {
-    if (!showFilters) return '';
-    return `<div class="group-filter-bar" role="tablist">
-      ${filters.map(f => {
-        const label = f === 'all' ? 'All' : STRAIN_LABELS[f];
-        const active = f === activeFilter ? ' active' : '';
-        return `<button type="button" class="group-filter-pill${active}" data-filter="${esc(f)}" role="tab">${esc(label)}</button>`;
-      }).join('')}
+  host.innerHTML = `
+    <div id="group-picker-sheet" role="dialog" aria-label="${esc(group.group_name)}">
+      <button type="button" id="group-picker-close" aria-label="Close">×</button>
+      ${group.cover_image
+        ? `<img id="group-picker-image" src="${esc(group.cover_image)}" alt="${esc(group.group_name)}"/>`
+        : `<div id="group-picker-image" class="group-picker-image-fallback">${esc(group.emoji || '🌿')}</div>`}
+      <h2 id="group-picker-title">${esc(group.group_name)}</h2>
+      <p id="group-picker-price">${esc(initialPrice)}</p>
+      <p id="group-picker-selected" style="display:none"></p>
+      ${showFilters ? `
+      <div id="group-picker-filters" class="group-picker-filter-pills" role="tablist">
+        ${filterOrder.map(f => {
+          const label = f === 'all' ? 'All' : STRAIN_LABELS[f];
+          const active = f === 'all' ? ' active' : '';
+          return `<button type="button" class="filter-pill${active}" data-filter="${esc(f)}" role="tab">${esc(label)}</button>`;
+        }).join('')}
+      </div>` : ''}
+      <div id="group-picker-list">
+        ${group.products.map(p => variantRowHtml(p)).join('')}
+      </div>
+      <button type="button" id="group-picker-cta" disabled>Select a ${verb} first</button>
     </div>`;
-  }
 
-  function variantRowHtml(p) {
-    const img  = p.image_url || p.image || '';
-    const st   = normStrain(p.strain_type);
-    const stockVal = p.stock_qty ?? p.stock ?? null;
-    const inStock  = stockVal === null || stockVal > 0;
-    const isSelected = p.id === selectedId;
-    const cls = `group-variant-row${isSelected ? ' selected' : ''}${inStock ? '' : ' sold-out'}`;
-    const badge = STRAIN_LABELS[st]
-      ? `<span class="group-strain-badge strain-${esc(st.replace(/\s+/g, '-'))}">${esc(STRAIN_LABELS[st])}</span>`
-      : '';
-    const thumb = img
-      ? `<img src="${esc(img)}" alt="" loading="lazy"/>`
-      : `<div class="group-variant-thumb-fallback">🌿</div>`;
-    const stockTag = inStock ? '' : `<span class="group-variant-oos">Out of stock</span>`;
-    const checkmark = isSelected ? `<span class="group-variant-check" aria-hidden="true">✓</span>` : '';
-    return `<button type="button" class="${cls}" data-variant="${esc(p.id)}" ${inStock ? '' : 'disabled aria-disabled="true"'}>
-      <span class="group-variant-thumb">${thumb}</span>
-      <span class="group-variant-mid">
-        <span class="group-variant-name">${esc(p.name || '')}</span>
-        <span class="group-variant-meta">${badge}${stockTag}</span>
-      </span>
-      <span class="group-variant-right">
-        <span class="group-variant-price">${esc(formatPrice(Number(p.price) || 0))}</span>
-        ${checkmark}
-      </span>
-    </button>`;
-  }
+  wire(host, group, options, verb);
+}
 
-  function paint() {
-    const sel = selected();
-    const cta = ctaState();
-    const heroSrc = heroImage();
-    const list = visibleProducts();
-    host.innerHTML = `
-      <div class="group-sheet" role="dialog" aria-label="${esc(group.group_name)}">
-        <div class="modal-handle" aria-hidden="true"></div>
-        <button class="modal-close group-sheet-close" aria-label="Close">×</button>
-        <div class="group-sheet-hero">
-          ${heroSrc
-            ? `<img class="group-sheet-hero-img" src="${esc(heroSrc)}" alt="${esc(group.group_name)}"/>`
-            : `<div class="group-sheet-hero-fallback">${esc(group.emoji || '🌿')}</div>`}
-        </div>
-        <div class="group-sheet-titles">
-          <h3 class="group-sheet-name">${esc(group.group_name)}</h3>
-          <div class="group-sheet-price">${esc(priceText())}</div>
-          ${sel ? `<div class="group-sheet-selected">Selected: ${esc(sel.name || '')}</div>` : ''}
-        </div>
-        <div class="group-sheet-body">
-          ${renderFilterPills()}
-          <div class="group-variant-list">
-            ${list.length
-              ? list.map(variantRowHtml).join('')
-              : `<div class="group-empty">Nothing matches that filter.</div>`}
-          </div>
-        </div>
-        <div class="group-sheet-footer">
-          <button type="button" class="group-add-btn${cta.disabled ? ' disabled' : ''}" ${cta.disabled ? 'disabled' : ''}>
-            ${esc(cta.label)}
-          </button>
-        </div>
-      </div>`;
-    wire();
-  }
+function variantRowHtml(p) {
+  const stockVal = p.stock_qty ?? p.stock ?? null;
+  const inStock  = stockVal === null || stockVal > 0;
+  const st  = normStrain(p.strain_type);
+  const img = p.image_url || p.image || '';
+  const badgeClass = STRAIN_LABELS[st] ? ` strain-${strainSlug(p.strain_type)}` : '';
+  const badge = STRAIN_LABELS[st]
+    ? `<span class="variant-badge group-strain-badge${badgeClass}">${esc(STRAIN_LABELS[st])}</span>`
+    : '';
+  const oosTag = inStock ? '' : `<span class="variant-oos">Out of stock</span>`;
+  const cls = `variant-row${inStock ? '' : ' out-of-stock'}`;
+  const thumb = img
+    ? `<img src="${esc(img)}" class="variant-thumb" alt="" loading="lazy"/>`
+    : `<div class="variant-thumb variant-thumb-fallback">🌿</div>`;
+  return `<div class="${cls}" data-id="${esc(p.id)}" data-instock="${inStock ? '1' : '0'}" data-strain="${esc(strainSlug(p.strain_type))}" data-price="${Number(p.price) || 0}" data-name="${esc(p.name || '')}" data-image="${esc(img)}" data-strain-type="${esc(p.strain_type || '')}">
+    ${thumb}
+    <div class="variant-info">
+      <span class="variant-name">${esc(p.name || '')}</span>
+      ${badge}${oosTag}
+    </div>
+    <span class="variant-price">${esc(formatPrice(Number(p.price) || 0))}</span>
+  </div>`;
+}
 
-  function wire() {
-    host.querySelector('.group-sheet-close')?.addEventListener('click', () => closeGroupPicker());
+function wire(host, group, options, verb) {
+  const imageEl    = host.querySelector('#group-picker-image');
+  const priceEl    = host.querySelector('#group-picker-price');
+  const selectedEl = host.querySelector('#group-picker-selected');
+  const ctaEl      = host.querySelector('#group-picker-cta');
+  const listEl     = host.querySelector('#group-picker-list');
 
-    host.querySelectorAll('.group-filter-pill').forEach(btn => {
-      btn.addEventListener('click', () => {
-        activeFilter = btn.dataset.filter;
-        // Keep the selection even if it's hidden by the new filter — the
-        // bottom button still reflects what they picked.
-        paint();
+  let selectedId = null;
+
+  host.querySelector('#group-picker-close')?.addEventListener('click', () => closeGroupPicker());
+
+  // Filter pills — show/hide variant rows via display:none, per spec.
+  host.querySelectorAll('#group-picker-filters .filter-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      host.querySelectorAll('#group-picker-filters .filter-pill').forEach(p => p.classList.toggle('active', p === pill));
+      const filter = pill.dataset.filter;
+      listEl.querySelectorAll('.variant-row').forEach(row => {
+        const show = filter === 'all' || row.dataset.strain === filter;
+        row.style.display = show ? '' : 'none';
       });
     });
+  });
 
-    host.querySelectorAll('.group-variant-row').forEach(row => {
-      row.addEventListener('click', () => {
-        if (row.classList.contains('sold-out')) return;
-        selectedId = row.dataset.variant;
-        paint();
-      });
-    });
+  function applySelection(row) {
+    selectedId = row.dataset.id;
+    const name  = row.dataset.name;
+    const price = Number(row.dataset.price) || 0;
+    const img   = row.dataset.image || group.cover_image || '';
+    const inStock = row.dataset.instock === '1';
 
-    host.querySelector('.group-add-btn')?.addEventListener('click', () => {
-      const sel = selected();
-      if (!sel) return;
-      const stock = sel.stock_qty ?? sel.stock ?? null;
-      if (!(stock === null || stock > 0)) return;
-
-      if (typeof options.onAdd === 'function') {
-        options.onAdd(sel);
-      } else {
-        // Default: reuse the (product, qty, variant) shape so cart keys, qty
-        // controls, and persistence all keep working. The synthetic "parent"
-        // carries the group label + cover image; the variant carries the
-        // selected product's identity, name, strain, and price override.
-        const parent = {
-          id:        group.id,                              // "group:<group_name>"
-          name:      group.group_name,
-          image_url: sel.image_url || sel.image || group.cover_image || '',
-          emoji:     group.emoji || '',
-          price:     Number(sel.price) || 0,
-          category:  group.category || '',
-        };
-        const variant = {
-          id:             sel.id,
-          name:           sel.name || '',
-          strain_type:    sel.strain_type || null,
-          price_override: Number(sel.price) || 0,
-        };
-        addToCart(parent, 1, variant);
+    // Swap hero image.
+    if (imageEl) {
+      if (imageEl.tagName === 'IMG') {
+        imageEl.src = img || group.cover_image || '';
+      } else if (img || group.cover_image) {
+        // Replace fallback div with a real <img> the first time a variant is picked.
+        const newImg = document.createElement('img');
+        newImg.id = 'group-picker-image';
+        newImg.alt = group.group_name || '';
+        newImg.src = img || group.cover_image || '';
+        imageEl.replaceWith(newImg);
       }
-      closeGroupPicker();
-    });
+    }
+    priceEl.textContent = formatPrice(price);
+    selectedEl.textContent = `Selected: ${name}`;
+    selectedEl.style.display = '';
+
+    // Toggle .selected on rows.
+    listEl.querySelectorAll('.variant-row').forEach(r => r.classList.toggle('selected', r === row));
+
+    // CTA state.
+    if (!inStock) {
+      ctaEl.textContent = 'Out of Stock';
+      ctaEl.disabled = true;
+    } else {
+      ctaEl.textContent = `Add to Cart · ${formatPrice(price)}`;
+      ctaEl.disabled = false;
+    }
   }
 
-  paint();
+  listEl.querySelectorAll('.variant-row').forEach(row => {
+    row.addEventListener('click', () => {
+      if (row.dataset.instock !== '1') return;
+      applySelection(row);
+    });
+  });
+
+  ctaEl.addEventListener('click', () => {
+    if (ctaEl.disabled || !selectedId) return;
+    const sel = group.products.find(p => p.id === selectedId);
+    if (!sel) return;
+    const stock = sel.stock_qty ?? sel.stock ?? null;
+    if (!(stock === null || stock > 0)) return;
+
+    if (typeof options.onAdd === 'function') {
+      options.onAdd(sel);
+    } else {
+      // Default: reuse the (product, qty, variant) cart shape so existing
+      // cart keys, qty controls, and persistence keep working.
+      const parent = {
+        id:        group.id,
+        name:      group.group_name,
+        image_url: sel.image_url || sel.image || group.cover_image || '',
+        emoji:     group.emoji || '',
+        price:     Number(sel.price) || 0,
+        category:  group.category || '',
+      };
+      const variant = {
+        id:             sel.id,
+        name:           sel.name || '',
+        strain_type:    sel.strain_type || null,
+        price_override: Number(sel.price) || 0,
+      };
+      addToCart(parent, 1, variant);
+    }
+    closeGroupPicker();
+  });
 }
