@@ -163,7 +163,7 @@ function rebuildDisplay() {
     g.min_price   = prices.length ? Math.min(...prices) : 0;
     g.max_price   = prices.length ? Math.max(...prices) : 0;
     g.has_any_in_stock  = g.products.some(p => (p.stock_qty ?? p.stock ?? null) === null || (p.stock_qty ?? p.stock) > 0);
-    g.has_strain_types  = g.products.some(p => !!p.strain_type);
+    g.has_strain_types  = g.products.some(p => (p.strain_type || '').trim() !== '');
     g.is_featured = g.products.some(p => !!p.is_featured);
     g.is_hot_deal = g.products.some(p => !!p.is_hot_deal);
     g.id          = `group:${gn}`;

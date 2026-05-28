@@ -20,8 +20,11 @@ const STRAIN_LABELS = {
 };
 const STRAIN_ORDER = ['sativa', 'indica', 'hybrid', 'sativa hybrid', 'indica hybrid'];
 
-function normStrain(s) { return (s || '').toLowerCase().trim(); }
+function normStrain(s) { return (s || '').toLowerCase().trim().replace(/[-_]+/g, ' ').replace(/\s+/g, ' '); }
 function strainSlug(s) { return normStrain(s).replace(/\s+/g, '-'); }
+function titleCase(s) {
+  return (s || '').split(' ').map(w => w ? w[0].toUpperCase() + w.slice(1) : w).join(' ');
+}
 
 function pickVerb(category) {
   return (category || '').toLowerCase() === 'edibles' ? 'flavor' : 'strain';
@@ -64,11 +67,32 @@ export function closeGroupPicker() {
 function renderSheet(host, group, options) {
   const verb = pickVerb(group.category);
 
-  const presentTypes = new Set(
-    group.products.map(p => normStrain(p.strain_type)).filter(t => STRAIN_LABELS[t])
-  );
-  const filterOrder = ['all', ...STRAIN_ORDER.filter(t => presentTypes.has(t))];
-  const showFilters = group.has_strain_types;
+  // Build filter pills from the strain_type values that actually appear on
+  // the products. Use the slug form (dash-separated) for the filter key so
+  // it matches the variant row's data-strain attribute exactly. Canonical
+  // 5 sort first in their fixed order; anything else follows alphabetically,
+  // so legitimate data is never dropped just because it isn't in the
+  // allowlist.
+  const STRAIN_SLUG_ORDER = STRAIN_ORDER.map(t => t.replace(/\s+/g, '-'));
+  const presentSlugsOrdered = [];
+  const seen = new Set();
+  for (const p of group.products) {
+    const slug = strainSlug(p.strain_type);
+    const norm = normStrain(p.strain_type);
+    if (!norm || seen.has(slug)) continue;
+    seen.add(slug);
+    presentSlugsOrdered.push({ slug, norm });
+  }
+  presentSlugsOrdered.sort((a, b) => {
+    const ai = STRAIN_SLUG_ORDER.indexOf(a.slug);
+    const bi = STRAIN_SLUG_ORDER.indexOf(b.slug);
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+    return a.norm.localeCompare(b.norm);
+  });
+  const filterOrder = [{ slug: 'all', norm: 'all' }, ...presentSlugsOrdered];
+  const showFilters = presentSlugsOrdered.length > 0;
 
   const initialPrice = priceRangeText(group.min_price, group.max_price);
 
@@ -83,10 +107,12 @@ function renderSheet(host, group, options) {
       <p id="group-picker-selected" style="display:none"></p>
       ${showFilters ? `
       <div id="group-picker-filters" class="group-picker-filter-pills" role="tablist">
-        ${filterOrder.map(f => {
-          const label = f === 'all' ? 'All' : STRAIN_LABELS[f];
-          const active = f === 'all' ? ' active' : '';
-          return `<button type="button" class="filter-pill${active}" data-filter="${esc(f)}" role="tab">${esc(label)}</button>`;
+        ${filterOrder.map(({ slug, norm }) => {
+          const label = slug === 'all'
+            ? 'All'
+            : (STRAIN_LABELS[norm] || titleCase(norm));
+          const active = slug === 'all' ? ' active' : '';
+          return `<button type="button" class="filter-pill${active}" data-filter="${esc(slug)}" role="tab">${esc(label)}</button>`;
         }).join('')}
       </div>` : ''}
       <div id="group-picker-list">
@@ -103,9 +129,11 @@ function variantRowHtml(p) {
   const inStock  = stockVal === null || stockVal > 0;
   const st  = normStrain(p.strain_type);
   const img = p.image_url || p.image || '';
-  const badgeClass = STRAIN_LABELS[st] ? ` strain-${strainSlug(p.strain_type)}` : '';
-  const badge = STRAIN_LABELS[st]
-    ? `<span class="variant-badge group-strain-badge${badgeClass}">${esc(STRAIN_LABELS[st])}</span>`
+  // Render a badge for ANY non-empty strain_type — known values pick up the
+  // preset color via .strain-<slug>; unknown values still get a neutral
+  // badge so legit data isn't silently hidden.
+  const badge = st
+    ? `<span class="variant-badge group-strain-badge strain-${esc(strainSlug(p.strain_type))}">${esc(STRAIN_LABELS[st] || titleCase(st))}</span>`
     : '';
   const oosTag = inStock ? '' : `<span class="variant-oos">Out of stock</span>`;
   const cls = `variant-row${inStock ? '' : ' out-of-stock'}`;
