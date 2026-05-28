@@ -27,7 +27,10 @@ function selectVerbForCategory(category) {
   return (category || '').toLowerCase() === 'edibles' ? 'flavor' : 'strain';
 }
 
-export function openGroupPicker(group) {
+// options.onAdd(selectedProduct) lets callers override the cart payload. The
+// legacy has_variants strain-picker uses this hook to keep the original
+// (parent, variant) shape so cart keys stay stable across the two pickers.
+export function openGroupPicker(group, options = {}) {
   if (!group?.products?.length) return;
 
   let host = document.getElementById('groupSheet');
@@ -42,7 +45,7 @@ export function openGroupPicker(group) {
   openOverlay('groupSheet', () => closeGroupPicker());
   host.addEventListener('click', backdropHandler);
 
-  renderSheet(host, group);
+  renderSheet(host, group, options);
 }
 
 function backdropHandler(e) {
@@ -58,7 +61,7 @@ export function closeGroupPicker() {
   setTimeout(() => { if (host && !host.classList.contains('open')) host.innerHTML = ''; }, 320);
 }
 
-function renderSheet(host, group) {
+function renderSheet(host, group, options = {}) {
   let selectedId = null;
   let activeFilter = 'all';
   const verb = selectVerbForCategory(group.category);
@@ -205,25 +208,29 @@ function renderSheet(host, group) {
       const stock = sel.stock_qty ?? sel.stock ?? null;
       if (!(stock === null || stock > 0)) return;
 
-      // Reuse the existing cart shape (product, qty, variant) so cart keys,
-      // qty controls, and persistence all keep working. The synthetic
-      // "parent" carries the group label + cover image; the variant carries
-      // the selected product's identity, name, strain, and price override.
-      const parent = {
-        id:        group.id,                              // "group:<group_name>"
-        name:      group.group_name,
-        image_url: sel.image_url || sel.image || group.cover_image || '',
-        emoji:     group.emoji || '',
-        price:     Number(sel.price) || 0,
-        category:  group.category || '',
-      };
-      const variant = {
-        id:             sel.id,
-        name:           sel.name || '',
-        strain_type:    sel.strain_type || null,
-        price_override: Number(sel.price) || 0,
-      };
-      addToCart(parent, 1, variant);
+      if (typeof options.onAdd === 'function') {
+        options.onAdd(sel);
+      } else {
+        // Default: reuse the (product, qty, variant) shape so cart keys, qty
+        // controls, and persistence all keep working. The synthetic "parent"
+        // carries the group label + cover image; the variant carries the
+        // selected product's identity, name, strain, and price override.
+        const parent = {
+          id:        group.id,                              // "group:<group_name>"
+          name:      group.group_name,
+          image_url: sel.image_url || sel.image || group.cover_image || '',
+          emoji:     group.emoji || '',
+          price:     Number(sel.price) || 0,
+          category:  group.category || '',
+        };
+        const variant = {
+          id:             sel.id,
+          name:           sel.name || '',
+          strain_type:    sel.strain_type || null,
+          price_override: Number(sel.price) || 0,
+        };
+        addToCart(parent, 1, variant);
+      }
       closeGroupPicker();
     });
   }

@@ -1,24 +1,20 @@
-/* MBG Storefront v2 — Strain Picker bottom sheet
+/* MBG Storefront v2 — Strain Picker (legacy has_variants entry point)
  *
- * Opens a slide-up sheet for a parent product (has_variants = true). The
- * customer picks one variant + a quantity, then we drop it into the cart
- * with a composite key so different strains coexist as separate cart lines.
+ * Historically this rendered a radio-list bottom sheet. It now delegates to
+ * the shared visual sheet in group-picker.js so has_variants=true parents
+ * and group_name-grouped products show identical UI: hero image that swaps
+ * on variant tap, strain badges, filter pills, sticky add-to-cart button.
  *
- * Reuses the existing .modal-backdrop / .modal-sheet animation pattern so
- * it matches the product modal's slide-up motion exactly.
+ * The legacy data shape is preserved: variants come from product_variants
+ * (price_override, is_available) and the cart entry is still keyed by
+ * <parent.id>_<variant.id> so existing in-flight carts don't double-up.
  */
 import { sb } from '../core/supabase.js';
-import { esc, formatPrice, openOverlay, closeOverlay, showToast } from '../core/utils.js';
 import { addToCart } from './cart.js?v=20260520-iphone-fix';
+import { openGroupPicker, closeGroupPicker } from './group-picker.js?v=20260527-groups';
 
-const STRAIN_META = {
-  sativa: { emoji: '☀️', label: 'Sativa' },
-  hybrid: { emoji: '⚖️', label: 'Hybrid' },
-  indica: { emoji: '🌙', label: 'Indica' },
-};
-const STRAIN_ORDER = ['sativa', 'hybrid', 'indica'];
+const STRAIN_ORDER = ['sativa', 'indica', 'hybrid', 'sativa hybrid', 'indica hybrid'];
 
-// In-memory cache so re-opening the same picker doesn't re-hit the network.
 const _variantCache = {};
 
 async function fetchVariants(parentId) {
@@ -37,212 +33,68 @@ async function fetchVariants(parentId) {
   return _variantCache[parentId];
 }
 
+function variantPrice(parent, v) {
+  return v.price_override != null ? Number(v.price_override) || 0 : Number(parent.price) || 0;
+}
+
+function buildGroupFromParent(parent, variants) {
+  const parentImg = parent.image_url || parent.image || '';
+  // product_variants rows don't carry per-variant images or stock_qty —
+  // fall back to the parent image and use is_available as the stock proxy
+  // so the shared picker's in-stock checks work without special-casing.
+  const products = variants.map(v => ({
+    id:          v.id,
+    name:        v.name || '',
+    strain_type: v.strain_type || null,
+    image_url:   v.image_url || parentImg,
+    price:       variantPrice(parent, v),
+    stock_qty:   v.is_available === false ? 0 : 1,
+    _variant:    v,            // round-trip handle for the onAdd hook
+  }));
+  // Sort with the canonical strain order, then by name within each group.
+  products.sort((a, b) => {
+    const ai = STRAIN_ORDER.indexOf((a.strain_type || '').toLowerCase());
+    const bi = STRAIN_ORDER.indexOf((b.strain_type || '').toLowerCase());
+    const aRank = ai === -1 ? 99 : ai;
+    const bRank = bi === -1 ? 99 : bi;
+    if (aRank !== bRank) return aRank - bRank;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+  const prices = products.map(p => p.price);
+  return {
+    __type:       'group',
+    id:           `parent:${parent.id}`,
+    group_name:   parent.name || '',
+    category:     parent.category || '',
+    cover_image:  parentImg,
+    emoji:        parent.emoji || '',
+    products,
+    min_price:        prices.length ? Math.min(...prices) : Number(parent.price) || 0,
+    max_price:        prices.length ? Math.max(...prices) : Number(parent.price) || 0,
+    has_any_in_stock: products.some(p => p.stock_qty > 0),
+    has_strain_types: products.some(p => !!p.strain_type),
+  };
+}
+
 export async function openStrainPicker(product) {
   if (!product?.id) return;
-
-  let host = document.getElementById('strainSheet');
-  if (!host) {
-    host = document.createElement('div');
-    host.id = 'strainSheet';
-    host.className = 'strain-sheet-backdrop';
-    document.body.appendChild(host);
-  }
-
-  // Show the sheet immediately with a loading state so the slide-up feels
-  // instant even if the variant fetch takes a beat.
-  host.innerHTML = `
-    <div class="strain-sheet" role="dialog" aria-label="Choose strain">
-      <div class="modal-handle" aria-hidden="true"></div>
-      <button class="modal-close strain-sheet-close" aria-label="Close">×</button>
-      <div class="strain-sheet-loading">Loading strains…</div>
-    </div>`;
-  requestAnimationFrame(() => host.classList.add('open'));
-  openOverlay('strainSheet', () => closeStrainPicker());
-  host.addEventListener('click', backdropHandler);
-  host.querySelector('.strain-sheet-close')?.addEventListener('click', () => closeStrainPicker());
-
   const variants = await fetchVariants(product.id);
-  renderSheet(host, product, variants);
-}
-
-function backdropHandler(e) {
-  if (e.target.id === 'strainSheet') closeStrainPicker();
-}
-
-export function closeStrainPicker() {
-  const host = document.getElementById('strainSheet');
-  if (!host) return;
-  host.classList.remove('open');
-  closeOverlay('strainSheet');
-  host.removeEventListener('click', backdropHandler);
-  // Match the 0.32s slide-down before wiping the DOM so it animates out.
-  setTimeout(() => { if (host && !host.classList.contains('open')) host.innerHTML = ''; }, 320);
-}
-
-function renderSheet(host, product, variants) {
-  // State held in closure — the sheet is rebuilt cheaply on each interaction
-  // (tab change rebuilds the list; selection / qty changes patch in place).
-  let selectedVariantId = null;
-  let activeTab = 'all';
-  let qty = 1;
-
-  // Tabs only show strain types that actually have variants.
-  const presentTypes = new Set(
-    variants
-      .map(v => (v.strain_type || '').toLowerCase())
-      .filter(t => STRAIN_META[t])
-  );
-  const tabs = ['all', ...STRAIN_ORDER.filter(t => presentTypes.has(t))];
-
-  const img = product.image_url || product.image || '';
-
-  function priceFor(variantId) {
-    const v = variants.find(x => x.id === variantId);
-    if (v && v.price_override != null) return Number(v.price_override) || 0;
-    return Number(product.price) || 0;
-  }
-
-  function selectedVariant() {
-    return variants.find(v => v.id === selectedVariantId) || null;
-  }
-
-  function renderTabs() {
-    return `
-      <div class="strain-tab-bar" role="tablist">
-        ${tabs.map(t => {
-          const label = t === 'all' ? 'All' : `${STRAIN_META[t].emoji} ${STRAIN_META[t].label}`;
-          const active = t === activeTab ? ' active' : '';
-          return `<button type="button" class="strain-tab${active}" data-tab="${esc(t)}" role="tab">${esc(label)}</button>`;
-        }).join('')}
-      </div>`;
-  }
-
-  function renderList() {
-    // Filter by tab, then group by strain_type for the headers.
-    const filtered = activeTab === 'all'
-      ? variants
-      : variants.filter(v => (v.strain_type || '').toLowerCase() === activeTab);
-
-    if (!filtered.length) {
-      return '<div class="strain-empty">No strains available right now.</div>';
-    }
-
-    // Group while preserving the strain-type order (sativa → hybrid → indica → null).
-    const groups = {};
-    for (const v of filtered) {
-      const key = (v.strain_type || '').toLowerCase();
-      const bucket = STRAIN_META[key] ? key : 'none';
-      (groups[bucket] ||= []).push(v);
-    }
-    const orderedKeys = [...STRAIN_ORDER.filter(k => groups[k]), ...(groups.none ? ['none'] : [])];
-
-    return orderedKeys.map(k => {
-      const header = k === 'none'
-        ? ''
-        : `<div class="strain-group-header">${STRAIN_META[k].emoji} ${esc(STRAIN_META[k].label)}</div>`;
-      const rows = groups[k].map(v => {
-        const soldOut = v.is_available === false;
-        const selected = v.id === selectedVariantId ? ' selected' : '';
-        return `
-          <button type="button"
-            class="strain-option${selected}${soldOut ? ' sold-out' : ''}"
-            data-variant="${esc(v.id)}"
-            ${soldOut ? 'disabled aria-disabled="true"' : ''}>
-            <span class="strain-radio" aria-hidden="true"></span>
-            <span class="strain-option-name">${esc(v.name)}</span>
-            ${soldOut ? '<span class="strain-soldout-badge">SOLD OUT</span>' : ''}
-          </button>`;
-      }).join('');
-      return `<div class="strain-group">${header}${rows}</div>`;
-    }).join('');
-  }
-
-  function ctaPrice() {
-    return priceFor(selectedVariantId) * qty;
-  }
-
-  function paint() {
-    host.innerHTML = `
-      <div class="strain-sheet" role="dialog" aria-label="Choose strain">
-        <div class="modal-handle" aria-hidden="true"></div>
-        <button class="modal-close strain-sheet-close" aria-label="Close">×</button>
-        <div class="strain-sheet-head">
-          <div class="strain-sheet-thumb">
-            ${img ? `<img src="${esc(img)}" alt=""/>` : `<div class="strain-sheet-fallback">${esc(product.emoji || '🌿')}</div>`}
-          </div>
-          <div class="strain-sheet-titles">
-            <h3 class="strain-sheet-name">${esc(product.name)}</h3>
-            <div class="strain-sheet-price">${esc(formatPrice(product.price))}</div>
-          </div>
-        </div>
-        <div class="strain-sheet-body">
-          <div class="strain-section-label">Choose strain:</div>
-          ${renderTabs()}
-          <div class="strain-list">${renderList()}</div>
-        </div>
-        <div class="strain-sheet-footer">
-          <div class="strain-qty-row">
-            <span class="strain-qty-label">Quantity</span>
-            <div class="strain-qty-control">
-              <button type="button" class="strain-qty-btn" data-delta="-1" aria-label="Decrease">−</button>
-              <span class="strain-qty-value">${qty}</span>
-              <button type="button" class="strain-qty-btn" data-delta="1" aria-label="Increase">+</button>
-            </div>
-          </div>
-          <button type="button" class="strain-add-btn${selectedVariantId ? '' : ' disabled'}"
-            ${selectedVariantId ? '' : 'disabled'}>
-            Add to Cart  ·  ${esc(formatPrice(ctaPrice()))}
-          </button>
-        </div>
-      </div>`;
-
-    wire();
-  }
-
-  function wire() {
-    host.querySelector('.strain-sheet-close')?.addEventListener('click', () => closeStrainPicker());
-
-    host.querySelectorAll('.strain-tab').forEach(btn => {
-      btn.addEventListener('click', () => {
-        activeTab = btn.dataset.tab;
-        // If the currently selected variant was filtered out, drop selection
-        // so the CTA accurately reflects what the customer can see/tap.
-        const sv = selectedVariant();
-        if (sv && activeTab !== 'all' && (sv.strain_type || '').toLowerCase() !== activeTab) {
-          selectedVariantId = null;
-        }
-        paint();
-      });
-    });
-
-    host.querySelectorAll('.strain-option').forEach(opt => {
-      opt.addEventListener('click', () => {
-        if (opt.classList.contains('sold-out')) return;
-        selectedVariantId = opt.dataset.variant;
-        paint();
-      });
-    });
-
-    host.querySelectorAll('.strain-qty-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const delta = Number(btn.dataset.delta) || 0;
-        qty = Math.min(10, Math.max(1, qty + delta));
-        paint();
-      });
-    });
-
-    host.querySelector('.strain-add-btn')?.addEventListener('click', () => {
-      const v = selectedVariant();
+  const group = buildGroupFromParent(product, variants);
+  openGroupPicker(group, {
+    // Preserve the legacy cart shape — (real parent product, qty, variant
+    // object that mirrors what the old radio picker dispatched) — so the
+    // cart key stays `<parent.id>_<variant.id>` and existing entries match.
+    onAdd: (sel) => {
+      const v = sel?._variant;
       if (!v) return;
-      addToCart(product, qty, {
-        id: v.id,
-        name: v.name,
-        strain_type: v.strain_type || null,
+      addToCart(product, 1, {
+        id:             v.id,
+        name:           v.name,
+        strain_type:    v.strain_type || null,
         price_override: v.price_override != null ? Number(v.price_override) : null,
       });
-      closeStrainPicker();
-    });
-  }
-
-  paint();
+    },
+  });
 }
+
+export { closeGroupPicker as closeStrainPicker };
