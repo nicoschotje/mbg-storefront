@@ -105,7 +105,7 @@ function renderSheet(host, group, options) {
       <h2 id="group-picker-title">${esc(group.group_name)}</h2>
       <p id="group-picker-price">${esc(initialPrice)}</p>
       <p id="group-picker-selected" style="display:none"></p>
-      ${showFilters ? `
+      ${true ? `
       <div id="group-picker-filters" class="group-picker-filter-pills" role="tablist">
         ${filterOrder.map(({ slug, norm }) => {
           const label = slug === 'all'
@@ -127,14 +127,11 @@ function renderSheet(host, group, options) {
 function variantRowHtml(p) {
   const stockVal = p.stock_qty ?? p.stock ?? null;
   const inStock  = stockVal === null || stockVal > 0;
-  const st  = normStrain(p.strain_type);
   const img = p.image_url || p.image || '';
-  // Render a badge for ANY non-empty strain_type — known values pick up the
-  // preset color via .strain-<slug>; unknown values still get a neutral
-  // badge so legit data isn't silently hidden.
-  const badge = st
-    ? `<span class="variant-badge group-strain-badge strain-${esc(strainSlug(p.strain_type))}">${esc(STRAIN_LABELS[st] || titleCase(st))}</span>`
-    : '';
+  // DEBUG: force-render strain value (or sentinel) for every variant so we
+  // can confirm whether strain_type is reaching the picker at all.
+  const strainHtml = `<span style="display:inline-block;background:#dcfce7;color:#166534;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;margin-top:4px;">${p.strain_type || 'NO STRAIN DATA'}</span>`;
+  const badge = strainHtml;
   const oosTag = inStock ? '' : `<span class="variant-oos">Out of stock</span>`;
   const cls = `variant-row${inStock ? '' : ' out-of-stock'}`;
   const thumb = img
