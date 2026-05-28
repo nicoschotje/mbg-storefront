@@ -119,12 +119,15 @@ export async function loadProducts() {
         if (groupedNames.has(s(p.name).trim())) return false;
         return true;
       }
-      if (s(p.group_name).trim()) return true;
       const name = s(p.name);
       const m = /\s—\s/.test(name);
       if (!m) return true;
       const parentPart = name.split(/\s—\s/)[0].trim();
-      return !activeParentNames.has(parentPart);
+      const hasGroup = s(p.group_name).trim() !== '';
+      // Purge ONLY if the legacy has_variants parent exists AND this product
+      // has no group_name. group_name products belong to the new grouping
+      // model — never remove them via the legacy "Parent — Variant" filter.
+      return !(activeParentNames.has(parentPart) && !hasGroup);
     });
 
     // Attach the variant count so productCardHtml can render the strain badge
