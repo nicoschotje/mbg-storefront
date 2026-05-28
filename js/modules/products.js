@@ -84,6 +84,17 @@ export async function loadProducts() {
     const all = productsRes.data || [];
     const variants = variantsRes.data || [];
 
+    // Derive group_name from "X — Y" product names if not returned by the API.
+    // Guards against PostgREST schema-cache lag after migrations — select('*')
+    // silently drops columns that aren't yet in the cache, so we compute it
+    // from the name as a belt-and-suspenders fallback.
+    for (const p of all) {
+      if (!p.group_name) {
+        const m = String(p.name || '').match(/^(.+?)\s—\s.+/);
+        if (m) p.group_name = m[1].trim();
+      }
+    }
+
     // Active parent product names. A "parent" is has_variants=true AND active.
     const activeParentNames = new Set(
       all.filter(p => p.has_variants === true).map(p => p.name)
