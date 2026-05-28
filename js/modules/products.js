@@ -72,6 +72,15 @@ export async function loadProducts() {
       all.filter(p => p.has_variants === true).map(p => p.name)
     );
 
+    // New-model group names actually present in the data — used to hide a
+    // stale has_variants=true parent of the same name so the new visual
+    // group card supersedes the legacy radio-picker parent.
+    const groupedNames = new Set(
+      all
+        .filter(p => p.has_variants !== true && (p.group_name || '').trim())
+        .map(p => p.group_name.trim())
+    );
+
     // Tally available variant counts by parent_product_id for the badge.
     const variantCountByParent = {};
     for (const v of variants) {
@@ -79,11 +88,20 @@ export async function loadProducts() {
       variantCountByParent[v.parent_product_id] = (variantCountByParent[v.parent_product_id] || 0) + 1;
     }
 
-    // Strip out the old individual-variant products ("Parent — Strain") when
-    // their parent is in the grid as a has_variants=true product. They'll be
-    // surfaced inside the strain picker instead.
+    // Filter rules, in order:
+    //  1. Hide a has_variants=true parent if a new-model group of the same
+    //     name exists (new wins over legacy).
+    //  2. Keep all other has_variants=true parents (they own their variants).
+    //  3. Always keep products that carry a group_name — they get grouped
+    //     into a single card by rebuildDisplay() below.
+    //  4. Legacy purge: drop "Parent — Strain" rows whose parent is still
+    //     an active has_variants=true product.
     const filtered = all.filter(p => {
-      if (p.has_variants === true) return true; // always keep parents
+      if (p.has_variants === true) {
+        if (groupedNames.has((p.name || '').trim())) return false;
+        return true;
+      }
+      if ((p.group_name || '').trim()) return true;
       const m = /\s—\s/.test(p.name || '');
       if (!m) return true;
       const parentPart = (p.name || '').split(/\s—\s/)[0].trim();
