@@ -119,30 +119,23 @@ export async function loadProducts() {
     _products = filtered.sort((a, b) => {
       if (!!b.is_featured !== !!a.is_featured) return b.is_featured ? 1 : -1;
       if (!!b.is_hot_deal !== !!a.is_hot_deal) return b.is_hot_deal ? 1 : -1;
-      return (a.name || '').localeCompare(b.name || '');
+      return s(a.name).localeCompare(s(b.name));
     });
-    safeRebuildDisplay();
+    rebuildDisplay();
     cacheProductsOffline(_products);
   } catch(e) {
     console.warn('[products] load failed, trying offline cache', e);
     _products = restoreProductsOffline();
-    safeRebuildDisplay();
+    rebuildDisplay();
   }
   return _products;
 }
 
-// rebuildDisplay catches everything: if a single malformed row ever throws
-// during grouping/sort, the catalogue still renders as a flat list of the
-// raw products instead of going blank.
-function safeRebuildDisplay() {
-  try {
-    rebuildDisplay();
-  } catch (err) {
-    console.error('[products] rebuildDisplay failed, falling back to flat list', err);
-    _groups = [];
-    _displayItems = [..._products];
-  }
-}
+// String coercion that never throws — many of the grouping/sort callbacks
+// chain string methods on column values; if any column ever comes back as
+// a number or boolean (admin tooling, migration in flight) we still want
+// the catalogue to render instead of taking down the whole page.
+function s(v) { return v == null ? '' : String(v); }
 
 // Splits _products into standalones + group entries. group_name groups products
 // that share the same label into a single visual card; the bottom-sheet picker
@@ -152,31 +145,34 @@ function rebuildDisplay() {
   const groupMap = new Map();
   const standalone = [];
   for (const p of _products) {
-    const gn = (p.group_name || '').trim();
+    const gn = s(p.group_name).trim();
     if (gn && p.has_variants !== true) {
       let g = groupMap.get(gn);
       if (!g) {
         g = { __type: 'group', group_name: gn, products: [] };
         groupMap.set(gn, g);
       }
-      g.products.push({ ...p });   // shallow copy — preserves every column from select('*'), incl. strain_type
+      g.products.push({ ...p });
     } else {
       standalone.push(p);
     }
   }
   _groups = [];
   for (const g of groupMap.values()) {
-    g.products.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    g.products.sort((a, b) => s(a.name).localeCompare(s(b.name)));
     const first = g.products[0] || {};
     const prices = g.products.map(p => Number(p.price) || 0);
-    g.category    = first.category || '';
+    g.category    = s(first.category);
     g.category_id = first.category_id || null;
-    g.cover_image = first.image_url || first.image || '';
-    g.emoji       = first.emoji || '';
+    g.cover_image = s(first.image_url || first.image);
+    g.emoji       = s(first.emoji);
     g.min_price   = prices.length ? Math.min(...prices) : 0;
     g.max_price   = prices.length ? Math.max(...prices) : 0;
-    g.has_any_in_stock  = g.products.some(p => (p.stock_qty ?? p.stock ?? null) === null || (p.stock_qty ?? p.stock) > 0);
-    g.has_strain_types  = g.products.some(p => (p.strain_type || '').trim() !== '');
+    g.has_any_in_stock  = g.products.some(p => {
+      const stk = p.stock_qty ?? p.stock ?? null;
+      return stk === null || Number(stk) > 0;
+    });
+    g.has_strain_types  = g.products.some(p => s(p.strain_type).trim() !== '');
     g.is_featured = g.products.some(p => !!p.is_featured);
     g.is_hot_deal = g.products.some(p => !!p.is_hot_deal);
     g.id          = `group:${gn}`;
@@ -187,7 +183,7 @@ function rebuildDisplay() {
     if (!!b.is_hot_deal !== !!a.is_hot_deal) return b.is_hot_deal ? 1 : -1;
     const an = a.__type === 'group' ? a.group_name : a.name;
     const bn = b.__type === 'group' ? b.group_name : b.name;
-    return (an || '').localeCompare(bn || '');
+    return s(an).localeCompare(s(bn));
   });
 }
 
