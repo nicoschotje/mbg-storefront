@@ -7,8 +7,7 @@ import { renderCategoryBanner } from './banners.js?v=20260518-mobile';
 import { addToCart } from './cart.js?v=20260520-iphone-fix';
 import { openRestockModal } from './restock.js?v=20260518-mobile';
 import { openStrainPicker } from './strain-picker.js?v=20260526-variants';
-import { openGroupPicker } from './group-picker.js?v=20260527-groups';
-
+import { openGroupPicker } from './group-picker.js?v=20260528-cart-label';
 let _products = [];
 let _categories = [];
 let _groups = [];           // group entries derived from products.group_name
