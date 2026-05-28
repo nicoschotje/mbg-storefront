@@ -121,14 +121,27 @@ export async function loadProducts() {
       if (!!b.is_hot_deal !== !!a.is_hot_deal) return b.is_hot_deal ? 1 : -1;
       return (a.name || '').localeCompare(b.name || '');
     });
-    rebuildDisplay();
+    safeRebuildDisplay();
     cacheProductsOffline(_products);
   } catch(e) {
     console.warn('[products] load failed, trying offline cache', e);
     _products = restoreProductsOffline();
-    rebuildDisplay();
+    safeRebuildDisplay();
   }
   return _products;
+}
+
+// rebuildDisplay catches everything: if a single malformed row ever throws
+// during grouping/sort, the catalogue still renders as a flat list of the
+// raw products instead of going blank.
+function safeRebuildDisplay() {
+  try {
+    rebuildDisplay();
+  } catch (err) {
+    console.error('[products] rebuildDisplay failed, falling back to flat list', err);
+    _groups = [];
+    _displayItems = [..._products];
+  }
 }
 
 // Splits _products into standalones + group entries. group_name groups products
@@ -182,8 +195,12 @@ function cacheProductsOffline(arr) {
   try { localStorage.setItem('mg_products_cache_v3', JSON.stringify(arr)); } catch(_) {}
 }
 function restoreProductsOffline() {
+  // Read the current cache key first; fall back to the previous one so a
+  // schema-bump rename doesn't strand users with no cached catalogue on a
+  // failed network load.
   try {
-    const raw = localStorage.getItem('mg_products_cache_v3');
+    const raw = localStorage.getItem('mg_products_cache_v3')
+             || localStorage.getItem('mg_products_cache_v2');
     return raw ? JSON.parse(raw) : [];
   } catch(_) { return []; }
 }

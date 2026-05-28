@@ -20,7 +20,7 @@ const STRAIN_LABELS = {
 };
 const STRAIN_ORDER = ['sativa', 'indica', 'hybrid', 'sativa hybrid', 'indica hybrid'];
 
-function normStrain(s) { return (s || '').toLowerCase().trim().replace(/[-_]+/g, ' ').replace(/\s+/g, ' '); }
+function normStrain(s) { return String(s == null ? '' : s).toLowerCase().trim().replace(/[-_]+/g, ' ').replace(/\s+/g, ' '); }
 function strainSlug(s) { return normStrain(s).replace(/\s+/g, '-'); }
 function titleCase(s) {
   return (s || '').split(' ').map(w => w ? w[0].toUpperCase() + w.slice(1) : w).join(' ');
