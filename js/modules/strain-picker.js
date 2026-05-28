@@ -43,6 +43,7 @@ function buildGroupFromParent(parent, variants) {
   // fall back to the parent image and use is_available as the stock proxy
   // so the shared picker's in-stock checks work without special-casing.
   const products = variants.map(v => ({
+    ...v,                                          // preserve every column from product_variants
     id:          v.id,
     name:        v.name || '',
     strain_type: v.strain_type || null,

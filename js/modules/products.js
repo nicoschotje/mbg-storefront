@@ -146,7 +146,7 @@ function rebuildDisplay() {
         g = { __type: 'group', group_name: gn, products: [] };
         groupMap.set(gn, g);
       }
-      g.products.push(p);
+      g.products.push({ ...p });   // shallow copy — preserves every column from select('*'), incl. strain_type
     } else {
       standalone.push(p);
     }
@@ -179,11 +179,11 @@ function rebuildDisplay() {
 }
 
 function cacheProductsOffline(arr) {
-  try { localStorage.setItem('mg_products_cache_v2', JSON.stringify(arr)); } catch(_) {}
+  try { localStorage.setItem('mg_products_cache_v3', JSON.stringify(arr)); } catch(_) {}
 }
 function restoreProductsOffline() {
   try {
-    const raw = localStorage.getItem('mg_products_cache_v2');
+    const raw = localStorage.getItem('mg_products_cache_v3');
     return raw ? JSON.parse(raw) : [];
   } catch(_) { return []; }
 }
