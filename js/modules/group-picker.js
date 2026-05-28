@@ -36,6 +36,17 @@ function priceRangeText(min, max) {
     : `${formatPrice(min)} – ${formatPrice(max)}`;
 }
 
+// Extract just the strain / option label from a full product name.
+// Products follow "GroupName — StrainName" — we strip the prefix so the
+// cart shows "Strain: Birthday Cake Kush" not "Strain: Exhale 1g — Birthday Cake Kush".
+function strainLabel(productName, groupName) {
+  const n = String(productName || '');
+  const gn = String(groupName || '');
+  if (gn && n.startsWith(gn + ' — ')) return n.slice(gn.length + 3);
+  if (n.includes(' — ')) return n.split(' — ')[1] || n;
+  return n;
+}
+
 export function openGroupPicker(group, options = {}) {
   if (!group?.products?.length) return;
 
@@ -116,7 +127,7 @@ function renderSheet(host, group, options) {
         }).join('')}
       </div>` : ''}
       <div id="group-picker-list">
-        ${group.products.map(p => variantRowHtml(p)).join('')}
+        ${group.products.map(p => variantRowHtml(p, group.group_name)).join('')}
       </div>
       <button type="button" id="group-picker-cta" disabled>Select a ${verb} first</button>
     </div>`;
@@ -124,7 +135,7 @@ function renderSheet(host, group, options) {
   wire(host, group, options, verb);
 }
 
-function variantRowHtml(p) {
+function variantRowHtml(p, groupName = '') {
   const stockVal = p.stock_qty ?? p.stock ?? null;
   const inStock  = stockVal === null || Number(stockVal) > 0;
   const img = p.image_url || p.image || '';
@@ -141,10 +152,10 @@ function variantRowHtml(p) {
   const thumb = img
     ? `<img src="${esc(img)}" class="variant-thumb" alt="" loading="lazy"/>`
     : `<div class="variant-thumb variant-thumb-fallback">🌿</div>`;
-  return `<div class="${cls}" data-id="${esc(p.id)}" data-instock="${inStock ? '1' : '0'}" data-strain="${esc(strainSlug(p.strain_type))}" data-price="${Number(p.price) || 0}" data-name="${esc(p.name || '')}" data-image="${esc(img)}" data-strain-type="${esc(p.strain_type || '')}">
+  return `<div class="${cls}" data-id="${esc(p.id)}" data-instock="${inStock ? '1' : '0'}" data-strain="${esc(strainSlug(p.strain_type))}" data-price="${Number(p.price) || 0}" data-name="${esc(strainLabel(p.name, groupName))}" data-image="${esc(img)}" data-strain-type="${esc(p.strain_type || '')}">
     ${thumb}
     <div class="variant-info">
-      <span class="variant-name">${esc(p.name || '')}</span>
+      <span class="variant-name">${esc(strainLabel(p.name, groupName))}</span>
       ${badge}${oosTag}
     </div>
     <span class="variant-price">${esc(formatPrice(Number(p.price) || 0))}</span>
@@ -240,7 +251,7 @@ function wire(host, group, options, verb) {
       };
       const variant = {
         id:             sel.id,
-        name:           sel.name || '',
+        name:           strainLabel(sel.name, group.group_name),
         strain_type:    sel.strain_type || null,
         price_override: Number(sel.price) || 0,
       };
@@ -248,4 +259,4 @@ function wire(host, group, options, verb) {
     }
     closeGroupPicker();
   });
-}
+    }
