@@ -21,7 +21,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,400;1,600;1,700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 
   <link rel="stylesheet" href="./css/tokens.css?v=20260520-iphone-fix" />
-  <link rel="stylesheet" href="./css/layout.css?v=20260519-ios" />
+  <link rel="stylesheet" href="./css/layout.css?v=20260529-subcat" />
   <link rel="stylesheet" href="./css/components.css?v=20260519-tracking" />
 
   <!-- Leaflet (checkout address map) — loaded from CDN, no build step. -->
@@ -119,6 +119,7 @@
   <!-- ── CATEGORY NAV ─────────────────────────── -->
   <nav class="cat-nav-wrap" id="catNavWrap" hidden>
     <div class="cat-nav" id="catNav" role="tablist"></div>
+    <div class="subcat-nav" id="subcatNav" role="tablist" hidden></div>
   </nav>
 
   <!-- ── FEATURED PRODUCTS ─────────────────────── -->
@@ -192,7 +193,7 @@
     import { showToast, installPopstateHandler } from './js/core/utils.js?v=20260520-polish';
     import { bindLoginScreen, tryRestoreSession, getSession, getAuthPhone, onAuthChange, logout } from './js/core/auth.js?v=20260520-polish';
     import { loadStoreSettings, loadBanners, loadAnnouncements, renderHero, renderAnnouncements } from './js/modules/banners.js?v=20260518-mobile';
-    import { loadCategories, loadProducts, renderCategoryNav, renderProductSections, renderFeaturedSection, setSearchQuery, getCategories, getProducts } from './js/modules/products.js?v=20260518-mobile';
+    import { loadCategories, loadProducts, renderCategoryNav, renderSubcategoryNav, renderProductSections, renderFeaturedSection, setSearchQuery, getCategories, getProducts } from './js/modules/products.js?v=20260529-subcat';
     import { loadDiscountRules, bindCartTriggers, getCartCount, onCartChange } from './js/modules/cart.js?v=20260520-iphone-fix';
     import { initBottomNav } from './js/modules/bottomnav.js?v=20260519-orders-tab';
     import './js/modules/delivery.js?v=20260518-mobile';
@@ -235,10 +236,18 @@
         getProducts()
       );
 
-      const catNav = document.getElementById('catNav');
-      const wrap   = document.getElementById('productsWrap');
+      const catNav    = document.getElementById('catNav');
+      const subcatNav = document.getElementById('subcatNav');
+      const wrap      = document.getElementById('productsWrap');
 
-      renderCategoryNav(catNav, () => renderProductSections(wrap, banners));
+      // When a main category changes we re-render its subcategory pill row
+      // (which resets to "All") and then the grid. When a subcategory pill
+      // is tapped we only re-render the grid.
+      renderCategoryNav(catNav, async () => {
+        await renderSubcategoryNav(subcatNav, () => renderProductSections(wrap, banners));
+        renderProductSections(wrap, banners);
+      });
+      await renderSubcategoryNav(subcatNav, () => renderProductSections(wrap, banners));
       renderProductSections(wrap, banners);
 
       // ── Search bar wiring ─────────────────────

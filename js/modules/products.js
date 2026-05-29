@@ -11,6 +11,12 @@ import { openStrainPicker } from './strain-picker.js?v=20260526-variants';
 let _products = [];
 let _categories = [];
 let _activeCat = 'All';
+// Subcategory layer: one level below the main category. `_activeSubcat`
+// holds the selected subcategory id, or the string 'All' for no filter.
+// `_subcatCache` memoises the per-category subcategory fetch so re-tapping
+// a main category doesn't refetch.
+let _activeSubcat = 'All';
+let _subcatCache = {};
 let _searchQuery = '';
 
 export function getProducts() { return _products; }
@@ -31,6 +37,14 @@ function applySearch(list) {
   );
 }
 
+// Subcategory filter. Only narrows when a specific main category AND a
+// specific subcategory pill are selected. Products with no subcategory_id
+// belong to no subcategory, so they only surface under the "All" pill.
+function applySubcat(list) {
+  if (_activeCat === 'All' || _activeSubcat === 'All') return list;
+  return list.filter(p => String(p.subcategory_id || '') === String(_activeSubcat));
+}
+
 export async function loadCategories() {
   try {
     const { data } = await sb().from('categories')
@@ -41,6 +55,25 @@ export async function loadCategories() {
     }));
   } catch(_) { _categories = []; }
   return _categories;
+}
+
+// Fetch a single category's active subcategories with the anon client,
+// ordered by sort_order. Memoised per category id so re-tapping a main
+// category serves from cache instead of refetching.
+export async function loadSubcategories(categoryId) {
+  if (!categoryId) return [];
+  if (_subcatCache[categoryId]) return _subcatCache[categoryId];
+  let list = [];
+  try {
+    const { data } = await sb().from('subcategories')
+      .select('*').eq('category_id', categoryId).eq('is_active', true)
+      .order('sort_order').order('name');
+    list = (data || []).map(s => ({
+      id: s.id, name: s.name, emoji: s.emoji || '', sort_order: s.sort_order ?? 0
+    }));
+  } catch(_) { list = []; }
+  _subcatCache[categoryId] = list;
+  return list;
 }
 
 export async function loadProducts() {
@@ -120,8 +153,46 @@ export function renderCategoryNav(targetEl, onChange) {
   targetEl.querySelectorAll('.cat-pill').forEach(btn => {
     btn.addEventListener('click', () => {
       _activeCat = btn.dataset.cat;
+      // Switching main category always resets the subcategory pill to "All".
+      _activeSubcat = 'All';
       targetEl.querySelectorAll('.cat-pill').forEach(b => b.classList.toggle('active', b===btn));
       onChange?.(_activeCat);
+    });
+  });
+}
+
+// Renders the subcategory pill row beneath the main-category tabs. The row
+// only appears when a specific main category (not "All") is selected and
+// that category has active subcategories. First pill is always "All".
+export async function renderSubcategoryNav(targetEl, onChange) {
+  if (!targetEl) return;
+  if (_activeCat === 'All') {
+    targetEl.innerHTML = '';
+    targetEl.hidden = true;
+    return;
+  }
+  const cat = _categories.find(c => c.name === _activeCat);
+  const subs = cat ? await loadSubcategories(cat.id) : [];
+  // Guard against a stale async result if the user switched category again
+  // while this fetch was in flight.
+  if (!cat || _activeCat !== cat.name) return;
+  if (!subs.length) {
+    targetEl.innerHTML = '';
+    targetEl.hidden = true;
+    return;
+  }
+  const pills = [{ id: 'All', name: 'All', emoji: '' }, ...subs];
+  targetEl.hidden = false;
+  targetEl.innerHTML = pills.map(s => {
+    const active = String(s.id) === String(_activeSubcat) ? ' active' : '';
+    const label = s.emoji ? `${esc(s.emoji)} ${esc(s.name)}` : esc(s.name);
+    return `<button type="button" class="subcat-pill${active}" data-subcat="${esc(s.id)}">${label}</button>`;
+  }).join('');
+  targetEl.querySelectorAll('.subcat-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _activeSubcat = btn.dataset.subcat;
+      targetEl.querySelectorAll('.subcat-pill').forEach(b => b.classList.toggle('active', b===btn));
+      onChange?.(_activeSubcat);
     });
   });
 }
@@ -138,11 +209,12 @@ export function renderProductSections(targetEl, banners = []) {
     html += '<div class="category-section" data-cat="All"><div class="product-grid">' + applySearch(_products).map(productCardHtml).join('') + '</div></div>';
   } else {
     cats.forEach(cat => {
-      const list = applySearch(_products.filter(p => productMatchesCat(p, cat)));
+      const list = applySearch(applySubcat(_products.filter(p => productMatchesCat(p, cat))));
       if (!list.length && _activeCat === 'All') return;
       const isWide = /dab|concentr/i.test(cat.name);
       const banner = banners.find(b => b.category_name === cat.name) || null;
-      const emptyMsg = _searchQuery ? 'No products found' : 'Nothing in this collection yet.';
+      const emptyMsg = _searchQuery ? 'No products found'
+        : (_activeSubcat !== 'All' ? 'No products here yet' : 'Nothing in this collection yet.');
       html += `<div class="category-section" data-cat="${esc(cat.name)}">${renderCategoryBanner(cat, banner)}<div class="product-grid${isWide?' product-grid-wide':''}">${list.map(p => productCardHtml(p, isWide)).join('') || `<div class="empty">${emptyMsg}</div>`}</div></div>`;
     });
   }
