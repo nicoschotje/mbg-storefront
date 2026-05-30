@@ -6,7 +6,7 @@ import { esc, formatPrice, openOverlay, closeOverlay } from '../core/utils.js';
 import { renderCategoryBanner } from './banners.js?v=20260518-mobile';
 import { addToCart } from './cart.js?v=20260520-iphone-fix';
 import { openRestockModal } from './restock.js?v=20260518-mobile';
-import { openStrainPicker } from './strain-picker.js?v=20260526-variants';
+import { openStrainPicker } from './strain-picker.js?v=20260530-varstock';
 
 let _products = [];
 let _categories = [];

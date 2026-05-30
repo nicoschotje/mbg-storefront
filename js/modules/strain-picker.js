@@ -141,7 +141,7 @@ function renderSheet(host, product, variants) {
         ? ''
         : `<div class="strain-group-header">${STRAIN_META[k].emoji} ${esc(STRAIN_META[k].label)}</div>`;
       const rows = groups[k].map(v => {
-        const soldOut = v.is_available === false;
+        const soldOut = v.is_available === false || (v.stock_qty != null && v.stock_qty <= 0);
         const selected = v.id === selectedVariantId ? ' selected' : '';
         return `
           <button type="button"
@@ -199,6 +199,14 @@ function renderSheet(host, product, variants) {
     wire();
   }
 
+  // Max selectable qty: a stock-tracked variant caps at its remaining stock
+  // (max 10 per order); untracked variants keep the flat 10 cap.
+  function maxQty() {
+    const sv = selectedVariant();
+    if (sv && sv.stock_qty != null) return Math.max(1, Math.min(10, sv.stock_qty));
+    return 10;
+  }
+
   function wire() {
     host.querySelector('.strain-sheet-close')?.addEventListener('click', () => closeStrainPicker());
 
@@ -219,6 +227,7 @@ function renderSheet(host, product, variants) {
       opt.addEventListener('click', () => {
         if (opt.classList.contains('sold-out')) return;
         selectedVariantId = opt.dataset.variant;
+        qty = Math.min(qty, maxQty());   // don't carry a qty above the new variant's stock
         paint();
       });
     });
@@ -226,7 +235,7 @@ function renderSheet(host, product, variants) {
     host.querySelectorAll('.strain-qty-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const delta = Number(btn.dataset.delta) || 0;
-        qty = Math.min(10, Math.max(1, qty + delta));
+        qty = Math.min(maxQty(), Math.max(1, qty + delta));
         paint();
       });
     });
