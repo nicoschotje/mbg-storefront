@@ -84,7 +84,7 @@ export function getSubtotal() {
 
 export function getDiscount() {
   const sub = getSubtotal();
-  return calcDiscount(sub, _appliedPromo);
+  return calcDiscount(sub, _appliedPromo, getCartItems());
 }
 
 // ── Mutations ────────────────────────────────────────────────
@@ -147,32 +147,78 @@ export async function loadDiscountRules() {
   return _discountRules;
 }
 
-export function calcDiscount(subtotal, promoCode) {
+export function calcDiscount(subtotal, promoCode, cartItems = null) {
+  const items = cartItems || getCartItems();
+
   if (promoCode) {
     const code = String(promoCode).toUpperCase();
-    const rule = _discountRules.find(r => r.promo_code && r.promo_code.toUpperCase() === code && subtotal >= (r.min_order_amount || 0));
-    if (rule) {
-      const amt = rule.discount_type === 'percent' ? subtotal * rule.discount_value/100 : rule.discount_value;
-      return { rule, amount: amt, source: 'promo' };
-    }
-    return { rule: null, amount: 0, source: 'promo_invalid' };
+    const rule = _discountRules.find(r =>
+      r.promo_code && r.promo_code.toUpperCase() === code &&
+      subtotal >= (r.min_order_amount || 0) &&
+      _isRuleActive(r)
+    );
+    if (!rule) return { rule: null, amount: 0, source: 'promo_invalid' };
+    const eligibleSubtotal = _eligibleSubtotal(rule, items);
+    if (eligibleSubtotal === 0) return { rule: null, amount: 0, source: 'promo_invalid' };
+    const amt = _calcAmount(rule, eligibleSubtotal);
+    return { rule, amount: amt, source: 'promo', eligibleSubtotal };
   }
-  // Auto-apply highest qualifying non-promo rule
-  const eligible = _discountRules.filter(r => !r.promo_code && subtotal >= (r.min_order_amount || 0));
+
+  // Auto-apply: highest-value non-promo rule whose min_order is met
+  const eligible = _discountRules.filter(r =>
+    !r.promo_code && subtotal >= (r.min_order_amount || 0) && _isRuleActive(r)
+  );
   if (!eligible.length) return { rule: null, amount: 0, source: 'none' };
-  let best = eligible[0]; let bestAmt = -1;
+
+  let best = null; let bestAmt = -1;
   for (const r of eligible) {
-    const amt = r.discount_type === 'percent' ? subtotal * r.discount_value/100 : r.discount_value;
+    const eS = _eligibleSubtotal(r, items);
+    const amt = _calcAmount(r, eS);
     if (amt > bestAmt) { bestAmt = amt; best = r; }
   }
-  return { rule: best, amount: bestAmt, source: 'auto' };
+  return best
+    ? { rule: best, amount: bestAmt, source: 'auto', eligibleSubtotal: _eligibleSubtotal(best, items) }
+    : { rule: null, amount: 0, source: 'none' };
+}
+
+function _isRuleActive(r) {
+  if (!r.is_active) return false;
+  const now = Date.now();
+  if (r.starts_at  && new Date(r.starts_at).getTime() > now)  return false;
+  if (r.expires_at && new Date(r.expires_at).getTime() < now)  return false;
+  if (r.max_uses != null && (r.uses_count || 0) >= r.max_uses) return false;
+  return true;
+}
+
+function _eligibleSubtotal(rule, items) {
+  const appliesTo = rule.applicable_to || 'all';
+  const ids = Array.isArray(rule.applicable_ids) ? rule.applicable_ids : [];
+  if (appliesTo === 'all' || !ids.length) {
+    return items.reduce((s, i) => s + priceForItem(i) * i.qty, 0);
+  }
+  return items.reduce((s, i) => {
+    const match =
+      (appliesTo === 'product'  && ids.includes(i.product.id)) ||
+      (appliesTo === 'category' && ids.includes(i.product.category_id));
+    return match ? s + priceForItem(i) * i.qty : s;
+  }, 0);
+}
+
+function _calcAmount(rule, eligibleSubtotal) {
+  if (eligibleSubtotal <= 0) return 0;
+  const t = rule.discount_type;
+  let amt = (t === 'percent' || t === 'percentage')
+    ? eligibleSubtotal * (rule.discount_value / 100)
+    : (t === 'free_delivery' ? 0 : (rule.discount_value || 0));
+  if (rule.max_discount_cap != null) amt = Math.min(amt, rule.max_discount_cap);
+  return amt;
 }
 
 export function applyPromo(code) {
   const c = String(code || '').trim().toUpperCase();
   if (!c) { _appliedPromo = null; persistCart(); emit(); return { ok: true, source: 'cleared' }; }
   const sub = getSubtotal();
-  const d = calcDiscount(sub, c);
+  const d = calcDiscount(sub, c, getCartItems());
   if (d.source === 'promo') {
     _appliedPromo = c;
     persistCart(); // promo is part of the cart snapshot
@@ -271,7 +317,7 @@ function renderCartDrawer(drawer) {
         <button id="applyPromoBtn" type="button">Apply</button>
       </div>
       <div id="promoMsg" class="promo-msg ${disc.source==='promo'?'ok':disc.source==='promo_invalid'?'err':''}">
-        ${disc.source==='promo' ? `Promo applied — saved ${esc(formatPrice(disc.amount))}` :
+        ${disc.source==='promo' ? `Promo applied — saved ${esc(formatPrice(disc.amount))}${disc.rule?.applicable_to && disc.rule.applicable_to !== 'all' ? ' on eligible items' : ''}` :
           disc.source==='promo_invalid' ? `Invalid or ineligible promo` :
           disc.source==='auto' ? `Auto-discount: ${esc(disc.rule?.label || 'Promo')} − ${esc(formatPrice(disc.amount))}` : ''}
       </div>
