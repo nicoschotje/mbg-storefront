@@ -12,6 +12,18 @@ import { initAddressMap } from './leaflet-map.js?v=20260519-leaflet';
 import { calculateDelivery } from './delivery.js?v=20260518-mobile';
 
 let _selectedPay = 'gcash';
+let _selectedZoneId = null;   // null = Metro Manila (distance calc)
+let _deliveryZones = [];      // loaded once per page load
+
+async function loadDeliveryZones() {
+  try {
+    const { data } = await sb().from('delivery_zones')
+      .select('id, name, base_fee')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true });
+    _deliveryZones = data || [];
+  } catch(_) { _deliveryZones = []; }
+}
 
 // Hard ceiling for receipt screenshots — matches the payment-receipts
 // Supabase storage bucket's 5 MB file_size_limit. Checked client-side so
@@ -19,12 +31,13 @@ let _selectedPay = 'gcash';
 // silent 500 from the upload edge function.
 const MAX_RECEIPT_BYTES = 5 * 1024 * 1024;
 
-export function openCheckoutScreen() {
+export async function openCheckoutScreen() {
   const session = getSession();
   if (getCartItems().length === 0) {
     showToast('Your bag is empty.');
     return;
   }
+  await loadDeliveryZones();
   let host = document.getElementById('checkoutScreen');
   if (!host) {
     host = document.createElement('section');
@@ -44,6 +57,7 @@ export function closeCheckoutScreen() {
   // Hide the persistent Google .pac-container — CSS hides it unless body has
   // .checkout-open, so it can't float over the success screen after close.
   document.body.classList.remove('checkout-open');
+  _selectedZoneId = null;
   const host = document.getElementById('checkoutScreen');
   if (!host) return;
   host.classList.remove('open');
@@ -51,9 +65,24 @@ export function closeCheckoutScreen() {
   closeOverlay('checkoutScreen');
 }
 
-// Runs the distance-based calculator with the live store_settings values
-// and whatever customer coordinates the address autocomplete has captured.
+// Runs the delivery calculator. If a zone is selected, uses its flat base_fee;
+// otherwise falls back to distance-based Metro Manila calculation.
 function computeDelivery(ss, subtotal) {
+  if (_selectedZoneId) {
+    const zone = _deliveryZones.find(z => z.id === _selectedZoneId);
+    if (zone) {
+      const fee = Number(zone.base_fee || 0);
+      const freeMin = Number(ss?.free_delivery_min) || 0;
+      const freeEnabled = ss?.free_delivery_enabled !== false;
+      const finalFee = (freeEnabled && freeMin > 0 && subtotal >= freeMin) ? 0 : fee;
+      return {
+        fee: finalFee,
+        label: finalFee === 0
+          ? `Free delivery to ${zone.name}`
+          : `Delivery to ${zone.name} — ₱${finalFee.toLocaleString('en-PH')}`,
+      };
+    }
+  }
   const coords = getSelectedCoords();
   return calculateDelivery({
     storeLat:        Number(ss?.store_lat),
@@ -215,6 +244,20 @@ function renderCheckout(host, session) {
 
       <section class="check-section">
         <h3>Delivery</h3>
+
+        ${_deliveryZones.length ? `
+        <label class="field" style="margin-bottom:10px">
+          <span>Delivery area</span>
+          <select id="coZoneSelect" class="field-input">
+            <option value="">Within Metro Manila</option>
+            ${_deliveryZones.map(z =>
+              `<option value="${esc(z.id)}" ${_selectedZoneId === z.id ? 'selected' : ''}>
+                Outside Metro Manila — ${esc(z.name)} (&#8369;${Number(z.base_fee || 0).toLocaleString('en-PH')})
+              </option>`
+            ).join('')}
+          </select>
+        </label>` : ''}
+
         <div class="delivery-quote"><b id="deliveryLabel">${esc(delivery.label)}</b></div>
         <p class="delivery-note" id="deliveryNote" hidden></p>
       </section>
@@ -278,6 +321,14 @@ function renderCheckout(host, session) {
 
   initAddressMap();
   refreshDelivery(host);
+
+  const zoneSelect = host.querySelector('#coZoneSelect');
+  if (zoneSelect) {
+    zoneSelect.addEventListener('change', () => {
+      _selectedZoneId = zoneSelect.value || null;
+      refreshDelivery(host);
+    });
+  }
 }
 
 function ensureQrLightbox() {
@@ -481,7 +532,10 @@ async function placeOrder(host) {
       customer_name:    name,
       customer_phone:   phone,
       delivery_address: addr,
-      delivery_zone:    getSelectedCoords() ? 'distance' : 'estimated',
+      delivery_zone: _selectedZoneId
+        ? (_deliveryZones.find(z => z.id === _selectedZoneId)?.name || _selectedZoneId)
+        : (getSelectedCoords() ? 'Metro Manila' : 'Metro Manila (estimated)'),
+      delivery_zone_id: _selectedZoneId || null,
       delivery_fee:     finalFee,
       subtotal:         Number(subtotal.toFixed(2)),
       total:            Number(total.toFixed(2)),
