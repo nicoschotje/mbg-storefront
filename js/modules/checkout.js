@@ -559,6 +559,7 @@ async function placeOrder(host) {
           variant_id: v ? v.id : null,
           variant_name: v ? v.name : null,
           display_name: displayNameForItem(it),
+          category_id: p.category_id || null,
           emoji: p.emoji || '🌿',
           price: Number(linePrice),
           qty: it.qty,
