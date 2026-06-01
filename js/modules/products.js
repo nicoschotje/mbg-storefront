@@ -267,8 +267,10 @@ function productCardHtml(p, isWide=false) {
   // for plain (non-variant) products.
   let footer;
   if (hasVariants) {
-    footer = `<span class="variant-count-pill">${variantCount} strain${variantCount === 1 ? '' : 's'} available</span>
-       <button type="button" class="choose-strain-btn" data-id="${esc(p.id)}">Choose Strain</button>`;
+    const _isFlower = (p.category_name || p.category || '').toLowerCase().includes('flower');
+    const _unit = _isFlower ? 'strain' : 'option';
+    footer = `<span class="variant-count-pill">${variantCount} ${_unit}${variantCount === 1 ? '' : 's'} available</span>
+       <button type="button" class="choose-strain-btn" data-id="${esc(p.id)}">${_isFlower ? 'Choose Strain' : 'Choose Option'}</button>`;
   } else {
     const stock = p.stock_qty ?? p.stock ?? null;
     const inStock = stock === null || stock > 0;

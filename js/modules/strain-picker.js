@@ -18,6 +18,11 @@ const STRAIN_META = {
 };
 const STRAIN_ORDER = ['sativa', 'hybrid', 'indica'];
 
+function isFlower(product) {
+  const cat = (product?.category_name || product?.category || '').toLowerCase();
+  return cat.includes('flower');
+}
+
 // In-memory cache so re-opening the same picker doesn't re-hit the network.
 const _variantCache = {};
 
@@ -107,6 +112,9 @@ function renderSheet(host, product, variants) {
   }
 
   function renderTabs() {
+    // Only render the tab bar for flower products that have actual strain-type tabs.
+    // Non-flower variants (sizes, dosages) don't benefit from Sativa/Hybrid/Indica filters.
+    if (!isFlower(product) || tabs.length <= 1) return '';
     return `
       <div class="strain-tab-bar" role="tablist">
         ${tabs.map(t => {
@@ -124,7 +132,7 @@ function renderSheet(host, product, variants) {
       : variants.filter(v => (v.strain_type || '').toLowerCase() === activeTab);
 
     if (!filtered.length) {
-      return '<div class="strain-empty">No strains available right now.</div>';
+      return `<div class="strain-empty">No ${isFlower(product) ? 'strains' : 'options'} available right now.</div>`;
     }
 
     // Group while preserving the strain-type order (sativa → hybrid → indica → null).
@@ -163,7 +171,7 @@ function renderSheet(host, product, variants) {
 
   function paint() {
     host.innerHTML = `
-      <div class="strain-sheet" role="dialog" aria-label="Choose strain">
+      <div class="strain-sheet" role="dialog" aria-label="${isFlower(product) ? 'Choose strain' : 'Choose option'}">
         <div class="modal-handle" aria-hidden="true"></div>
         <button class="modal-close strain-sheet-close" aria-label="Close">×</button>
         <div class="strain-sheet-head">
@@ -176,7 +184,7 @@ function renderSheet(host, product, variants) {
           </div>
         </div>
         <div class="strain-sheet-body">
-          <div class="strain-section-label">Choose strain:</div>
+          <div class="strain-section-label">${isFlower(product) ? 'Choose strain:' : 'Choose option:'}</div>
           ${renderTabs()}
           <div class="strain-list">${renderList()}</div>
         </div>
