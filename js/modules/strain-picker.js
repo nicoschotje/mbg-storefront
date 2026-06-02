@@ -94,6 +94,11 @@ function renderSheet(host, product, variants) {
   );
   const tabs = ['all', ...STRAIN_ORDER.filter(t => presentTypes.has(t))];
 
+  // Flowers have strain-typed variants (sativa/hybrid/indica). Edibles, vapes,
+  // concentrates use sizes/formats instead — for those we say "option" not "strain".
+  const isFlower = presentTypes.size > 0;
+  const pickerNoun = isFlower ? 'strain' : 'option';
+
   const img = product.image_url || product.image || '';
 
   function priceFor(variantId) {
@@ -163,7 +168,7 @@ function renderSheet(host, product, variants) {
 
   function paint() {
     host.innerHTML = `
-      <div class="strain-sheet" role="dialog" aria-label="Choose strain">
+      <div class="strain-sheet" role="dialog" aria-label="Choose ${pickerNoun}">
         <div class="modal-handle" aria-hidden="true"></div>
         <button class="modal-close strain-sheet-close" aria-label="Close">×</button>
         <div class="strain-sheet-head">
@@ -176,8 +181,8 @@ function renderSheet(host, product, variants) {
           </div>
         </div>
         <div class="strain-sheet-body">
-          <div class="strain-section-label">Choose strain:</div>
-          ${renderTabs()}
+          <div class="strain-section-label">Choose ${pickerNoun}:</div>
+          ${isFlower ? renderTabs() : ''}
           <div class="strain-list">${renderList()}</div>
         </div>
         <div class="strain-sheet-footer">
