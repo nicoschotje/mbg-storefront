@@ -176,7 +176,10 @@ async function ensureAutocomplete(field) {
 // after the checkout drawer has opened, never on page load. Event delegation
 // re-binds automatically each time checkout re-renders the field.
 document.addEventListener('focusin', (e) => {
-  if (e.target?.id === FIELD_ID) ensureAutocomplete(e.target);
+  if (e.target?.id === FIELD_ID) { ensureAutocomplete(e.target); startPacLoop(); }
+});
+document.addEventListener('focusout', (e) => {
+  if (e.target?.id === FIELD_ID) stopPacLoop();
 });
 
 function onPlaceChanged(autocomplete, field) {
@@ -235,3 +238,31 @@ document.addEventListener('mbg:mapPinMoved', (e) => {
     document.dispatchEvent(new CustomEvent('mbg:deliveryAddrChanged'));
   });
 });
+
+// ── Keep the Google .pac-container glued to #coStreet ───────────────────────
+// The checkout is a position:fixed, internally-scrolling overlay. Google
+// positions its autocomplete dropdown against the document and only repositions
+// on window scroll, so inside the overlay it floats mid-screen as the customer
+// scrolls the form. While #coStreet is focused we re-pin the dropdown to the
+// field's live viewport rect every frame (position:fixed), which beats Google's
+// own positioning and keeps it directly under the input. The loop stops on blur
+// (Google hides the dropdown then anyway).
+function pinPacContainer() {
+  const field = document.getElementById(FIELD_ID);
+  const pac = document.querySelector('.pac-container');
+  if (!field || !pac) return;
+  const r = field.getBoundingClientRect();
+  pac.style.position = 'fixed';
+  pac.style.top = Math.round(r.bottom) + 'px';
+  pac.style.left = Math.round(r.left) + 'px';
+  pac.style.width = Math.round(r.width) + 'px';
+  pac.style.marginTop = '0';
+}
+let _pacLoop = false;
+function runPacLoop() {
+  if (!_pacLoop) return;
+  pinPacContainer();
+  requestAnimationFrame(runPacLoop);
+}
+function startPacLoop() { if (!_pacLoop) { _pacLoop = true; runPacLoop(); } }
+function stopPacLoop()  { _pacLoop = false; }
