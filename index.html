@@ -207,6 +207,19 @@
     // ── Boot sequence ─────────────────────────
     installPopstateHandler();
 
+    // Pin the sticky category nav to the bottom of the variable-height, notch-aware
+    // header. A hardcoded 70px offset overlapped the header on notched iPhones;
+    // measuring the header live keeps the second row from colliding with the first.
+    (function syncHeaderHeight() {
+      const header = document.getElementById('appHeader');
+      if (!header) return;
+      const apply = () => { const h = header.offsetHeight; if (h) document.documentElement.style.setProperty('--header-h', h + 'px'); };
+      apply();
+      if (window.ResizeObserver) new ResizeObserver(apply).observe(header);
+      window.addEventListener('resize', apply);
+      window.addEventListener('orientationchange', () => setTimeout(apply, 250));
+    })();
+
     function showApp() {
       document.getElementById('loginScreen').style.display = 'none';
       ['appHeader','announceBar','heroSection','catNavWrap','productsWrap','appFooter','bottomNav'].forEach(id => {
