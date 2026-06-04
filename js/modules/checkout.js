@@ -5,10 +5,10 @@ import { sb, logActivity } from '../core/supabase.js';
 import { esc, formatPrice, normalisePhone, isValidPHPhone, openOverlay, closeOverlay, showToast } from '../core/utils.js';
 import { EDGE_URL, SUPABASE_ANON, PAYMENT_METHODS } from '../core/config.js';
 import { getStoreSettings } from './banners.js?v=20260518-mobile';
-import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo, priceForItem, displayNameForItem } from './cart.js?v=20260520-iphone-fix';
+import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo, priceForItem, displayNameForItem } from './cart.js?v=20260605-uifix';
 import { getSession, getAuthPhone } from '../core/auth.js?v=20260520-polish';
-import { getSelectedCoords } from './address.js?v=20260520-polish';
-import { initAddressMap } from './leaflet-map.js?v=20260519-leaflet';
+import { getSelectedCoords } from './address.js?v=20260605-uifix';
+import { initAddressMap } from './leaflet-map.js?v=20260605-uifix';
 import { calculateDelivery } from './delivery.js?v=20260518-mobile';
 
 let _selectedPay = 'gcash';
@@ -55,14 +55,9 @@ export async function openCheckoutScreen() {
   host.classList.add('open');
   document.body.classList.add('lock-scroll');
   openOverlay('checkoutScreen', () => closeCheckoutScreen());
-  // Reveal the Places dropdown (CSS hides it unless body has .checkout-open).
-  document.body.classList.add('checkout-open');
 }
 
 export function closeCheckoutScreen() {
-  // Hide the persistent Google .pac-container — CSS hides it unless body has
-  // .checkout-open, so it can't float over the success screen after close.
-  document.body.classList.remove('checkout-open');
   const host = document.getElementById('checkoutScreen');
   if (!host) return;
   host.classList.remove('open');
