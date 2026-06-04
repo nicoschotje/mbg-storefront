@@ -374,7 +374,10 @@
 .cart-panel { display: flex; flex-direction: column; height: 100%; }
 .cart-header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 1.1rem 1.3rem 0.8rem;
+  /* The drawer is fixed at top:0, so on a notched iPhone the title + close
+     button would sit under the Dynamic Island / notch. Add the safe-area
+     inset on top of the normal padding so they always clear it. */
+  padding: calc(1.1rem + var(--safe-top)) 1.3rem 0.8rem;
   border-bottom: 1px solid var(--border-light);
 }
 .cart-header h3 {
@@ -586,18 +589,9 @@
 .field-locked input { background: var(--input-bg, #f9f7f2); color: #888; cursor: default; }
 .field-change-link { font-size: 12px; color: #888; text-decoration: underline; cursor: pointer; display: block; margin-top: 2px; }
 
-/* Google Places dropdown is appended to <body>; keep it above overlays while
-   checkout is open, and hide it entirely once checkout closes (it persists in
-   the DOM, so CSS is the reliable way to keep it off the success screen). */
-.pac-container {
-  z-index: 10000 !important;
-  max-height: 38vh;
-  overflow-y: auto;
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(14,28,16,0.22);
-  margin-top: 0;
-}
-body:not(.checkout-open) .pac-container { display: none !important; }
+/* Google Places (and its floating ".pac-container") was removed — the address
+   field now uses our own in-flow suggestion list, styled as .addr-suggest near
+   the bottom of this file. Nothing here to position against <body> anymore. */
 
 .zone-grid {
   display: grid; grid-template-columns: 1fr 1fr 1fr;
