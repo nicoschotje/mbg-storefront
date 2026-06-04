@@ -589,7 +589,14 @@
 /* Google Places dropdown is appended to <body>; keep it above overlays while
    checkout is open, and hide it entirely once checkout closes (it persists in
    the DOM, so CSS is the reliable way to keep it off the success screen). */
-.pac-container { z-index: 10000 !important; }
+.pac-container {
+  z-index: 10000 !important;
+  max-height: 38vh;
+  overflow-y: auto;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(14,28,16,0.22);
+  margin-top: 0;
+}
 body:not(.checkout-open) .pac-container { display: none !important; }
 
 .zone-grid {

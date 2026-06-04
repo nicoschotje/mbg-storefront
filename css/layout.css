@@ -333,7 +333,7 @@ body.lock-scroll { overflow: hidden; }
 /* ── CATEGORY NAV ─────────────────────────────────────── */
 .cat-nav-wrap {
   position: sticky;
-  top: 70px;
+  top: var(--header-h, calc(70px + var(--safe-top)));
   z-index: 40;
   background: rgba(232, 223, 200, 0.92);
   backdrop-filter: blur(20px);
