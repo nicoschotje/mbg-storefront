@@ -1,34 +1,52 @@
-/* MBG Storefront v2 — Google Places + Google Geocoder delivery address
+/* MBG Storefront v2 — Delivery address autocomplete (Nominatim / OpenStreetMap)
  * Philippines-only address handling for the checkout Street/Building field.
  *
- * Two address/coordinate sources, both via the Google Maps JS API:
- *   • Places Autocomplete on #coStreet — picking a suggestion fills the five
- *     structured fields and captures the place geometry.
- *   • Reverse geocoding on map-pin drag — dragging the Leaflet pin stores the
- *     new coords and refills the same five fields from the geocoded result.
+ * WHY THIS IS NOT GOOGLE PLACES ANYMORE
+ * -------------------------------------
+ * The old version used Google Places autocomplete. Google appends its dropdown
+ * (".pac-container") to <body> and positions it against the *document*, so
+ * inside our position:fixed, internally-scrolling checkout overlay the dropdown
+ * floated detached in the middle of the screen — and on iPhone the on-screen
+ * keyboard pushed it off-screen entirely. That was the "broken address on
+ * iPhone" the owner reported.
  *
- * Either way the coordinates land in localStorage (the single source read by
- * getSelectedCoords()) so checkout can include them in the place-order payload
- * and feed the distance-based delivery calculator. A `mbg:deliveryAddrChanged`
- * event is dispatched whenever the address/coords change so checkout can
- * re-quote, and `mbg:addrPicked` moves the Leaflet pin to match a pick.
+ * This version renders our OWN suggestion list (.addr-suggest) as a child of the
+ * Street field, INSIDE the scrolling form. It scrolls with the form, sits
+ * directly under the input, and is never affected by the keyboard — because it
+ * is a normal in-flow element, not a fixed body-level popup. It also removes the
+ * Google Maps dependency (and its hardcoded API key / billing), leaving a single
+ * address provider: OpenStreetMap's Nominatim, which the app already uses for
+ * the Leaflet map and reverse-geocoding.
  *
- * The #coStreet field is created on demand (and re-rendered) by checkout.js,
- * so this module loads the Google Maps script lazily on the first focus of
- * that field — never on page load — and re-binds via event delegation each
- * time checkout rebuilds the form.
+ * Two coordinate sources, both Nominatim:
+ *   • Typing in #coStreet → search suggestions; tapping one fills the five
+ *     structured fields and captures that place's coordinates.
+ *   • Dragging the Leaflet map pin → reverse-geocode the new point and refill
+ *     the same five fields.
+ *
+ * Either way the coordinates land in localStorage (read by getSelectedCoords())
+ * so checkout can include them in the place-order payload and feed the
+ * distance-based delivery calculator. `mbg:deliveryAddrChanged` re-quotes the
+ * fee; `mbg:addrPicked` moves the Leaflet pin to match a picked suggestion.
+ *
+ * #coStreet is created on demand (and re-rendered) by checkout.js, so this
+ * module binds via event delegation and (re)creates the suggestion list against
+ * whichever #coStreet is currently in the DOM.
  */
 
 const FIELD_ID = 'coStreet';
 const COORDS_KEY = 'mbg_delivery_coords';
-const GMAPS_KEY = 'AIzaSyDZ7UhB5kR5RjP7m_KEd9JZKvYFAa4iwF8';
 
-let _selectedCoords = null;   // { lat, lng } once a place is picked
-let _mapsPromise = null;      // single in-flight/loaded Google Maps JS promise
+// Nominatim politeness: only search once the query is meaningful, debounce, and
+// abort any in-flight request when the customer keeps typing.
+const MIN_QUERY_LEN = 4;
+const SEARCH_DEBOUNCE_MS = 350;
+
+let _selectedCoords = null;   // { lat, lng } once a place is picked / pin dragged
 let _filling = false;         // true while we programmatically fill the fields
-let _geocoder = null;         // lazily created google.maps.Geocoder instance
-let _autocomplete = null;     // current google.maps.places.Autocomplete instance
-let _autocompleteInput = null; // the input element _autocomplete is bound to
+let _searchTimer = null;      // debounce handle for the live search
+let _searchAbort = null;      // AbortController for the in-flight search fetch
+let _lastResults = [];        // latest Nominatim results, indexed by the list items
 
 function storeCoords(coords) {
   _selectedCoords = coords;
@@ -55,53 +73,39 @@ export function getSelectedCoords() {
   return _selectedCoords;
 }
 
-// ── Lazy Google Maps loader ─────────────────────────────────────────────────
-// Injects the Maps JS API exactly once, only when first needed. The async
-// loader calls the global callback below, which resolves the shared promise.
-function loadGoogleMaps() {
-  if (_mapsPromise) return _mapsPromise;
-  _mapsPromise = new Promise((resolve, reject) => {
-    if (window.google?.maps?.places) { resolve(); return; }
-    window.__mbgGmapsReady = () => resolve();
-    const s = document.createElement('script');
-    s.async = true;
-    s.src = 'https://maps.googleapis.com/maps/api/js'
-      + '?key=' + GMAPS_KEY
-      + '&libraries=places&loading=async&callback=__mbgGmapsReady';
-    s.onerror = () => {
-      _mapsPromise = null;   // allow a retry on the next focus
-      reject(new Error('Google Maps JS failed to load'));
-    };
-    document.head.appendChild(s);
-  });
-  return _mapsPromise;
+// Minimal HTML escaper — Nominatim's display_name is external text, so escape it
+// before injecting into the suggestion list. (Kept local so this module stays
+// self-contained and has no import-version coupling.)
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-// ── Shared address-component parser ──────────────────────────────────────────
-// Maps a Google `address_components` array onto the five structured fields and
-// fires input events so any validation listeners run. _filling guards the
-// manual-edit listener below so these synthetic events don't wipe the
-// coordinates being stored alongside. `streetEl` lets the autocomplete pass
-// the exact #coStreet node it bound to (it may be mid-re-render).
-function fillAddressFields(components, streetEl, lat, lng) {
-  let streetNumber = '';
-  let route = '';
-  let city = '';
-  let province = '';
-  let postalCode = '';
+// ── Map a Nominatim result onto the five structured fields ───────────────────
+// Nominatim returns a flat `address` object (road, suburb, city, state, …),
+// unlike Google's typed component array. PH barangays come through as
+// suburb/neighbourhood/village/quarter, and the province is usually `state`.
+function parseNominatim(result) {
+  const a = result?.address || {};
+  const houseStreet = [a.house_number, a.road].filter(Boolean).join(' ').trim();
+  const street   = houseStreet || a.building || a.amenity || a.shop || result?.name || '';
+  const barangay = a.suburb || a.neighbourhood || a.village || a.quarter
+                 || a.city_district || a.residential || a.hamlet || '';
+  const city     = a.city || a.town || a.municipality || a.county || '';
+  const province = a.province || a.state || a.region || '';
+  const postal   = a.postcode || '';
+  const lat = Number(result?.lat);
+  const lng = Number(result?.lon);
+  return { street, barangay, city, province, postal, lat, lng };
+}
 
-  for (const component of components) {
-    const types = component.types;
-    if (types.includes('street_number')) streetNumber = component.long_name;
-    if (types.includes('route')) route = component.long_name;
-    if (types.includes('locality')) city = component.long_name;
-    if (types.includes('administrative_area_level_2')) province = component.long_name;
-    if (!province && types.includes('administrative_area_level_1')) province = component.long_name;
-    if (types.includes('postal_code')) postalCode = component.long_name;
-  }
-
-  const street = [streetNumber, route].filter(Boolean).join(' ');
-
+// Writes the five fields and fires input events so any validation listeners run.
+// `_filling` guards the manual-edit listener below so these synthetic events
+// don't wipe the coordinates we're storing alongside, or kick off a new search.
+// `streetEl` lets the caller pass the exact #coStreet node it is working with
+// (checkout may be mid-re-render).
+function setFields({ street, barangay, city, province, postal }, streetEl) {
   _filling = true;
   const filled = [];
   const set = (id, val, el) => {
@@ -109,160 +113,152 @@ function fillAddressFields(components, streetEl, lat, lng) {
     if (el && val) { el.value = String(val); filled.push(el); }
   };
   set(FIELD_ID, street, streetEl);
+  set('coBarangay', barangay);
   set('coCity', city);
   set('coProvince', province);
-  set('coPostal', postalCode);
+  set('coPostal', postal);
   for (const el of filled) {
     el.dispatchEvent(new Event('input', { bubbles: true }));
   }
   _filling = false;
-
-  // Google rarely returns the barangay for PH addresses. If the field is still
-  // empty and we have the place coordinates, backfill it from a Nominatim
-  // reverse geocode (which does expose barangay-level data).
-  const bgyEl = document.getElementById('coBarangay');
-  if (bgyEl && !bgyEl.value.trim() && Number.isFinite(lat) && Number.isFinite(lng)) {
-    backfillBarangayFromNominatim(lat, lng, bgyEl);
-  }
 }
 
-// Reverse-geocodes lat/lng via Nominatim purely to obtain the barangay that
-// Google Places omits for the Philippines. Only writes #coBarangay if it's
-// still empty when the response lands, so it never clobbers manual input.
-async function backfillBarangayFromNominatim(lat, lng, bgyEl) {
+// ── Inline suggestion list (.addr-suggest) ───────────────────────────────────
+// Created lazily as a child of the Street field's .field wrapper (which is
+// position:relative in CSS), so the list drops directly under the input and
+// scrolls with the form. Re-created automatically after a checkout re-render.
+function getSuggestBox(field) {
+  const wrap = field.closest('.field') || field.parentElement;
+  if (!wrap) return null;
+  let box = wrap.querySelector('.addr-suggest');
+  if (!box) {
+    box = document.createElement('ul');
+    box.className = 'addr-suggest';
+    box.hidden = true;
+    box.setAttribute('role', 'listbox');
+    // pointerdown (not click) so selecting fires BEFORE the input's blur would
+    // hide the list; preventDefault keeps focus on the field.
+    box.addEventListener('pointerdown', (e) => {
+      const item = e.target.closest('.addr-suggest-item');
+      if (!item) return;
+      e.preventDefault();
+      const r = _lastResults[Number(item.dataset.idx)];
+      if (r) selectSuggestion(r, field);
+    });
+    wrap.appendChild(box);
+  }
+  return box;
+}
+
+function hideSuggestions(field) {
+  const wrap = field?.closest?.('.field');
+  const box = wrap?.querySelector('.addr-suggest');
+  if (box) { box.hidden = true; box.innerHTML = ''; }
+}
+
+function renderSuggestions(field, results) {
+  const box = getSuggestBox(field);
+  if (!box) return;
+  _lastResults = results;
+  if (!results.length) { box.hidden = true; box.innerHTML = ''; return; }
+  box.innerHTML = results.map((r, i) =>
+    `<li class="addr-suggest-item" role="option" data-idx="${i}">${escapeHtml(r.display_name)}</li>`
+  ).join('');
+  box.hidden = false;
+}
+
+// Live PH address search via Nominatim. Country-restricted, capped, abortable.
+async function runSearch(field) {
+  const q = field.value.trim();
+  if (q.length < MIN_QUERY_LEN) { hideSuggestions(field); return; }
+
+  if (_searchAbort) _searchAbort.abort();
+  _searchAbort = new AbortController();
+
   try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&lat=${lat}&lon=${lng}`
-    );
-    if (!res.ok) return;
-    const data = await res.json();
-    const a = data?.address || {};
-    const barangay = a.suburb || a.neighbourhood || a.village || a.quarter || a.residential;
-    if (barangay && !bgyEl.value.trim()) {
-      bgyEl.value = barangay;
-      bgyEl.dispatchEvent(new Event('input', { bubbles: true }));
+    const url = 'https://nominatim.openstreetmap.org/search'
+      + '?format=jsonv2&addressdetails=1&countrycodes=ph&limit=5&accept-language=en'
+      + '&q=' + encodeURIComponent(q);
+    const res = await fetch(url, { signal: _searchAbort.signal, headers: { 'Accept': 'application/json' } });
+    if (!res.ok) { hideSuggestions(field); return; }
+    const results = await res.json();
+    // The field may have been re-rendered while the request was in flight —
+    // re-resolve the live node before painting.
+    const live = document.getElementById(FIELD_ID) || field;
+    renderSuggestions(live, Array.isArray(results) ? results : []);
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      console.warn('[address] search failed', e);
+      hideSuggestions(field);
     }
-  } catch (e) {
-    console.warn('[address] barangay reverse-geocode failed', e);
   }
 }
 
-// ── Bind Places autocomplete to the (re-rendered) #coStreet field ────────────
-async function ensureAutocomplete(field) {
-  if (!field || field.dataset.gAutocomplete === '1') return;
-  field.dataset.gAutocomplete = '1';
-  try {
-    await loadGoogleMaps();
-  } catch (e) {
-    console.warn('[address]', e.message);
-    field.dataset.gAutocomplete = '';   // let the next focus retry
-    return;
-  }
-  // Reuse an autocomplete that's still bound to a connected input; only build a
-  // fresh one after a checkout re-render has replaced #coStreet.
-  if (_autocomplete && _autocompleteInput && _autocompleteInput.isConnected) {
-    return;
-  }
+// Customer tapped a suggestion: fill the fields, capture coords, move the pin.
+function selectSuggestion(result, field) {
+  const p = parseNominatim(result);
+  setFields(p, field);
+  hideSuggestions(field);
 
-  _autocomplete = new google.maps.places.Autocomplete(field, {
-    componentRestrictions: { country: 'ph' },
-    fields: ['address_components', 'geometry']
-  });
-  _autocompleteInput = field;
-  _autocomplete.addListener('place_changed', () => onPlaceChanged(_autocomplete, field));
-}
-
-// Lazy-load + bind only when the customer focuses the address field — i.e.
-// after the checkout drawer has opened, never on page load. Event delegation
-// re-binds automatically each time checkout re-renders the field.
-document.addEventListener('focusin', (e) => {
-  if (e.target?.id === FIELD_ID) { ensureAutocomplete(e.target); startPacLoop(); }
-});
-document.addEventListener('focusout', (e) => {
-  if (e.target?.id === FIELD_ID) stopPacLoop();
-});
-
-function onPlaceChanged(autocomplete, field) {
-  const place = autocomplete.getPlace();
-  if (!place || !place.address_components) return;
-
-  // Coordinates feed the distance-based delivery quote (read via
-  // getSelectedCoords), recentre the Leaflet pin, and drive the Nominatim
-  // barangay backfill inside fillAddressFields.
-  const loc = place.geometry?.location;
-  const lat = loc ? loc.lat() : null;
-  const lng = loc ? loc.lng() : null;
-
-  fillAddressFields(place.address_components, field, lat, lng);
-
-  // Drop focus from the Street input so the Google dropdown collapses cleanly.
-  const el = document.getElementById('coStreet');
-  if (el) el.blur();
-
-  if (Number.isFinite(lat) && Number.isFinite(lng)) {
-    storeCoords({ lat, lng });
-    document.dispatchEvent(new CustomEvent('mbg:addrPicked', { detail: { lat, lng } }));
+  if (Number.isFinite(p.lat) && Number.isFinite(p.lng)) {
+    storeCoords({ lat: p.lat, lng: p.lng });
+    document.dispatchEvent(new CustomEvent('mbg:addrPicked', { detail: { lat: p.lat, lng: p.lng } }));
   } else {
     storeCoords(null);
   }
   document.dispatchEvent(new CustomEvent('mbg:deliveryAddrChanged'));
 }
 
-// Manually editing the street invalidates the coordinates of any earlier pick
-// (and any stale coords left in localStorage from a previous order), so
-// delivery falls back to an estimate until a new place is chosen. Skipped
-// while we fill the fields programmatically above.
+// ── Event wiring (delegated, survives checkout re-renders) ────────────────────
+
+// Typing in the Street field: debounce a search, and treat the edit as
+// invalidating any previously picked coordinates (delivery falls back to an
+// estimate until a new suggestion is chosen). Skipped while we fill the fields
+// programmatically (setFields sets _filling).
 document.addEventListener('input', (e) => {
   if (e.target?.id !== FIELD_ID || _filling) return;
   storeCoords(null);
   document.dispatchEvent(new CustomEvent('mbg:deliveryAddrChanged'));
+  clearTimeout(_searchTimer);
+  const field = e.target;
+  _searchTimer = setTimeout(() => runSearch(field), SEARCH_DEBOUNCE_MS);
+});
+
+// Leaving the field hides the list — but only after a short delay so a tap on a
+// suggestion still registers (pointerdown above also guards this).
+document.addEventListener('focusout', (e) => {
+  if (e.target?.id !== FIELD_ID) return;
+  setTimeout(() => hideSuggestions(e.target), 150);
+});
+
+// Tapping anywhere outside the Street field closes the list.
+document.addEventListener('pointerdown', (e) => {
+  if (e.target?.closest?.('.field')?.querySelector?.('#' + FIELD_ID)) return; // inside street field
+  if (e.target?.id === FIELD_ID) return;
+  const field = document.getElementById(FIELD_ID);
+  if (field) hideSuggestions(field);
 });
 
 // The Leaflet map pin is the other source of coordinates — when the customer
-// drags it, store the new position and reverse-geocode it with the Google
-// Geocoder to refresh the five address fields. getSelectedCoords() stays the
-// single source of truth.
-document.addEventListener('mbg:mapPinMoved', (e) => {
+// drags it, store the new position and reverse-geocode with Nominatim to refresh
+// the five address fields. getSelectedCoords() stays the single source of truth.
+document.addEventListener('mbg:mapPinMoved', async (e) => {
   const lat = Number(e.detail?.lat);
   const lng = Number(e.detail?.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
   storeCoords({ lat, lng });
 
-  // Reverse-geocode only once the Maps script is available.
-  if (!window.google?.maps?.Geocoder) return;
-  _geocoder = _geocoder || new google.maps.Geocoder();
-  _geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-    if (status !== 'OK' || !results || !results[0]) return;
-    fillAddressFields(results[0].address_components, null, lat, lng);
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&accept-language=en&lat=${lat}&lon=${lng}`
+    );
+    if (!res.ok) return;
+    const data = await res.json();
+    const p = parseNominatim(data);
+    setFields(p, null);
     document.dispatchEvent(new CustomEvent('mbg:deliveryAddrChanged'));
-  });
+  } catch (err) {
+    console.warn('[address] reverse geocode failed', err);
+  }
 });
-
-// ── Keep the Google .pac-container glued to #coStreet ───────────────────────
-// The checkout is a position:fixed, internally-scrolling overlay. Google
-// positions its autocomplete dropdown against the document and only repositions
-// on window scroll, so inside the overlay it floats mid-screen as the customer
-// scrolls the form. While #coStreet is focused we re-pin the dropdown to the
-// field's live viewport rect every frame (position:fixed), which beats Google's
-// own positioning and keeps it directly under the input. The loop stops on blur
-// (Google hides the dropdown then anyway).
-function pinPacContainer() {
-  const field = document.getElementById(FIELD_ID);
-  const pac = document.querySelector('.pac-container');
-  if (!field || !pac) return;
-  const r = field.getBoundingClientRect();
-  pac.style.position = 'fixed';
-  pac.style.top = Math.round(r.bottom) + 'px';
-  pac.style.left = Math.round(r.left) + 'px';
-  pac.style.width = Math.round(r.width) + 'px';
-  pac.style.marginTop = '0';
-}
-let _pacLoop = false;
-function runPacLoop() {
-  if (!_pacLoop) return;
-  pinPacContainer();
-  requestAnimationFrame(runPacLoop);
-}
-function startPacLoop() { if (!_pacLoop) { _pacLoop = true; runPacLoop(); } }
-function stopPacLoop()  { _pacLoop = false; }

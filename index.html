@@ -21,8 +21,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,400;1,600;1,700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 
   <link rel="stylesheet" href="./css/tokens.css?v=20260520-iphone-fix" />
-  <link rel="stylesheet" href="./css/layout.css?v=20260529-subcat" />
-  <link rel="stylesheet" href="./css/components.css?v=20260519-tracking" />
+  <link rel="stylesheet" href="./css/layout.css?v=20260605-uifix" />
+  <link rel="stylesheet" href="./css/components.css?v=20260605-uifix" />
 
   <!-- Leaflet (checkout address map) — loaded from CDN, no build step. -->
   <link rel="stylesheet"
@@ -193,12 +193,12 @@
     import { showToast, installPopstateHandler } from './js/core/utils.js?v=20260520-polish';
     import { bindLoginScreen, tryRestoreSession, getSession, getAuthPhone, onAuthChange, logout } from './js/core/auth.js?v=20260520-polish';
     import { loadStoreSettings, loadBanners, loadAnnouncements, renderHero, renderAnnouncements } from './js/modules/banners.js?v=20260518-mobile';
-    import { loadCategories, loadProducts, renderCategoryNav, renderSubcategoryNav, renderProductSections, renderFeaturedSection, setSearchQuery, getCategories, getProducts } from './js/modules/products.js?v=20260529-subcat';
-    import { loadDiscountRules, bindCartTriggers, getCartCount, onCartChange } from './js/modules/cart.js?v=20260520-iphone-fix';
+    import { loadCategories, loadProducts, renderCategoryNav, renderSubcategoryNav, renderProductSections, renderFeaturedSection, setSearchQuery, getCategories, getProducts } from './js/modules/products.js?v=20260605-uifix';
+    import { loadDiscountRules, bindCartTriggers, getCartCount, onCartChange } from './js/modules/cart.js?v=20260605-uifix';
     import { initBottomNav } from './js/modules/bottomnav.js?v=20260519-orders-tab';
     import './js/modules/delivery.js?v=20260518-mobile';
-    import { openCheckoutScreen } from './js/modules/checkout.js?v=20260520-iphone-fix';
-    import './js/modules/address.js?v=20260520-polish';
+    import { openCheckoutScreen } from './js/modules/checkout.js?v=20260605-uifix';
+    import './js/modules/address.js?v=20260605-uifix';
     import { openTrackingScreen } from './js/modules/tracking.js?v=20260520-iphone-fix';
     import { loadTier, renderTierBadge } from './js/modules/tiers.js?v=20260518-mobile';
     import { renderUserMenu } from './js/modules/usermenu.js?v=20260518-mobile';

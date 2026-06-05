@@ -2,8 +2,8 @@
  *
  * Renders a small map with a single draggable pin inside the checkout
  * #addr-map container, visible from the start of checkout. Dragging the
- * pin updates the stored delivery coordinates, while picking a Google
- * Places autocomplete suggestion moves the pin to match.
+ * pin updates the stored delivery coordinates, while picking an address
+ * suggestion (Nominatim) moves the pin to match.
  *
  * The pin's position is mirrored into address.js (the single source of
  * truth for getSelectedCoords()) via the `mbg:mapPinMoved` event, and a
@@ -12,7 +12,7 @@
  * Leaflet itself is loaded from the jsDelivr CDN in index.html, exposing
  * the global `L`.
  */
-import { getSelectedCoords } from './address.js?v=20260520-polish';
+import { getSelectedCoords } from './address.js?v=20260605-uifix';
 import { getStoreSettings } from './banners.js?v=20260518-mobile';
 
 // Fallback centre (Manila) used only when store coords are missing.
@@ -69,7 +69,7 @@ function onMarkerDragEnd() {
   document.dispatchEvent(new CustomEvent('mbg:deliveryAddrChanged'));
 }
 
-// A Google Places autocomplete pick on #coStreet — move + recentre the pin.
+// An address suggestion pick on #coStreet — move + recentre the pin.
 document.addEventListener('mbg:addrPicked', (e) => {
   const lat = Number(e.detail?.lat);
   const lng = Number(e.detail?.lng);
