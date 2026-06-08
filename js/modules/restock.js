@@ -1,7 +1,7 @@
 /* MBG Storefront v2 — Restock notifications */
-import { sb } from '../core/supabase.js';
-import { esc, normalisePhone, isValidPHPhone, openOverlay, closeOverlay, showToast } from '../core/utils.js';
-import { getAuthPhone } from '../core/auth.js?v=20260520-polish';
+import { sb } from '../core/supabase.js?v=20260608-audit';
+import { esc, normalisePhone, isValidPHPhone, openOverlay, closeOverlay, showToast } from '../core/utils.js?v=20260608-audit';
+import { getAuthPhone } from '../core/auth.js?v=20260608-audit';
 
 export function openRestockModal(product) {
   let host = document.getElementById('restockModal');

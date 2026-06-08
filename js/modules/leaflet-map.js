@@ -12,8 +12,8 @@
  * Leaflet itself is loaded from the jsDelivr CDN in index.html, exposing
  * the global `L`.
  */
-import { getSelectedCoords } from './address.js?v=20260605-uifix';
-import { getStoreSettings } from './banners.js?v=20260518-mobile';
+import { getSelectedCoords } from './address.js?v=20260608-audit';
+import { getStoreSettings } from './banners.js?v=20260608-audit';
 
 // Fallback centre (Manila) used only when store coords are missing.
 const MANILA = { lat: 14.5995, lng: 120.9842 };

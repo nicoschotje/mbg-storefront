@@ -7,9 +7,9 @@
  * Reuses the existing .modal-backdrop / .modal-sheet animation pattern so
  * it matches the product modal's slide-up motion exactly.
  */
-import { sb } from '../core/supabase.js';
-import { esc, formatPrice, openOverlay, closeOverlay, showToast } from '../core/utils.js';
-import { addToCart } from './cart.js?v=20260605-uifix';
+import { sb } from '../core/supabase.js?v=20260608-audit';
+import { esc, formatPrice, openOverlay, closeOverlay, showToast } from '../core/utils.js?v=20260608-audit';
+import { addToCart } from './cart.js?v=20260608-audit';
 
 const STRAIN_META = {
   sativa: { emoji: '☀️', label: 'Sativa' },

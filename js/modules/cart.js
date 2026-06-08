@@ -1,8 +1,8 @@
 /* MBG Storefront v2 — Cart module */
-import { sb } from '../core/supabase.js';
-import { esc, formatPrice, openOverlay, closeOverlay, showToast } from '../core/utils.js';
-import { DEFAULT_FREE_DELIVERY_THRESHOLD } from '../core/config.js';
-import { getStoreSettings } from './banners.js?v=20260518-mobile';
+import { sb } from '../core/supabase.js?v=20260608-audit';
+import { esc, formatPrice, openOverlay, closeOverlay, showToast } from '../core/utils.js?v=20260608-audit';
+import { DEFAULT_FREE_DELIVERY_THRESHOLD } from '../core/config.js?v=20260608-audit';
+import { getStoreSettings } from './banners.js?v=20260608-audit';
 
 // In-memory cart  { [productId]: { product, qty } }
 let _cart = {};

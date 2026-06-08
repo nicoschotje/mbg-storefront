@@ -1,12 +1,12 @@
 /* MBG Storefront v2 — Products module
  * FIX: productMatchesCat now checks category_id (UUID) first
  */
-import { sb } from '../core/supabase.js';
-import { esc, formatPrice, openOverlay, closeOverlay } from '../core/utils.js';
-import { renderCategoryBanner } from './banners.js?v=20260518-mobile';
-import { addToCart } from './cart.js?v=20260605-uifix';
-import { openRestockModal } from './restock.js?v=20260518-mobile';
-import { openStrainPicker } from './strain-picker.js?v=20260605-uifix';
+import { sb } from '../core/supabase.js?v=20260608-audit';
+import { esc, formatPrice, openOverlay, closeOverlay } from '../core/utils.js?v=20260608-audit';
+import { renderCategoryBanner } from './banners.js?v=20260608-audit';
+import { addToCart } from './cart.js?v=20260608-audit';
+import { openRestockModal } from './restock.js?v=20260608-audit';
+import { openStrainPicker } from './strain-picker.js?v=20260608-audit';
 
 let _products = [];
 let _categories = [];

@@ -4,9 +4,9 @@
  * `customer_id` column. Tier is an integer (1=Seedling .. 5=Diamond).
  * If the SELECT errors or no row exists, we silently degrade.
  */
-import { sb } from '../core/supabase.js';
-import { esc } from '../core/utils.js';
-import { getSession, getAuthPhone } from '../core/auth.js?v=20260520-polish';
+import { sb } from '../core/supabase.js?v=20260608-audit';
+import { esc } from '../core/utils.js?v=20260608-audit';
+import { getSession, getAuthPhone } from '../core/auth.js?v=20260608-audit';
 
 const TIER_META = {
   1: { name: 'Seedling', color: '#94a3b8' },
