@@ -157,9 +157,9 @@ audit pass (as done here) makes this auditable in a single grep.
   `connect-src … https://mrbeanisgreenies.com https://www.mrbeanisgreenies.com`.
 - **Fix status:**
   - **Done in this PR:** corrected the CSP host to `mrbeaniesgreenies.com` (client-side half).
-  - **Owner/DB action (one line):**
+  - **Applied to the live DB (2026-06-08, with owner approval):**
     ```sql
-    UPDATE store_settings SET webauthn_rp_id = 'mrbeaniesgreenies.com';
+    UPDATE store_settings SET webauthn_rp_id = 'mrbeaniesgreenies.com';  -- ✅ applied
     ```
     PIN login is unaffected. Because credentials are origin/rp-bound and none could have enrolled
     successfully under the wrong value, this is strictly an improvement — but any user who *did*
@@ -257,7 +257,7 @@ From Supabase security advisors (0 ERROR, 80 WARN, 1 INFO):
 | Stranded `?v=` un-stranded; `CACHE_VERSION` bumped; one-refresh update | ✅ single-tag unification + `v17` |
 | Every P0/P1 fixed & verified | ⚠️ Storefront halves done & merged; DB/edge halves (token rotation+revoke, `rp_id` UPDATE, RPC price recompute, anon RPC revokes) **documented for owner/branch** — they are live-prod or out-of-repo and unsafe to apply blind |
 | Full journey on iPhone 15 Pro / SE / Android, caches cleared | ⚠️ **Not done here** — no browser/device in sandbox; static + live-DB verified instead. On-device QA is the outstanding owner/follow-up item |
-| Passkey `rp_id` reconciled (or deferred w/ re-enroll caveat) | ✅ CSP fixed; DB one-liner provided + re-enroll caveat (P1-1) |
+| Passkey `rp_id` reconciled (or deferred w/ re-enroll caveat) | ✅ CSP fixed in PR **and** live DB `webauthn_rp_id` updated (2026-06-08); re-enroll caveat noted (P1-1) |
 | No service-role secret / XSS / double-order / COD remnant | ✅ all confirmed clean |
 | BEFORE/AFTER screenshots per visual fix | ❌ not produced (no device); not fabricated |
 

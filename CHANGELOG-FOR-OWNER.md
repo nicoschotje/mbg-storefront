@@ -26,11 +26,10 @@ this once. From then on it updates by itself.
    so they can store it the safe way. I've already stopped the *shop* from sending it out, and written
    the exact database command to lock it down, but the password itself must be changed by you because
    it's already been exposed.
-2. **🔴 Face ID / Fingerprint login is broken on the live site** because of a one-letter typo in a
-   setting: it says `mrbeanisgreenies.com` (missing an "e") instead of `mrbeaniesgreenies.com`.
-   PIN login still works fine. I fixed the matching typo in the website's security settings; the
-   database value needs a one-line update (the exact command is in the audit file). After that,
-   anyone who wants Face ID login just sets it up once more.
+2. **✅ Face ID / Fingerprint login — FIXED.** It was broken on the live site because of a one-letter
+   typo in a setting (`mrbeanisgreenies.com`, missing an "e"). With your go-ahead I corrected it in
+   both places: the website security settings (in this update) and the live database value (already
+   applied). PIN login was never affected. Anyone who wants Face ID login just sets it up once more.
 3. **🟠 Order totals are trusted from the customer's phone.** In theory someone tech-savvy could send
    an order that says it costs ₱1. Your current process actually catches this — they still have to
    upload a real payment screenshot and you confirm it — so it's low risk. The proper backend fix
