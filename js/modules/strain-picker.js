@@ -9,7 +9,7 @@
  */
 import { sb } from '../core/supabase.js';
 import { esc, formatPrice, openOverlay, closeOverlay, showToast } from '../core/utils.js';
-import { addToCart } from './cart.js?v=20260605-uifix';
+import { addToCart } from './cart.js?v=20260608-deepfix';
 
 const STRAIN_META = {
   sativa: { emoji: '☀️', label: 'Sativa' },

@@ -7,9 +7,50 @@ let _settings = null;
 
 export function getStoreSettings() { return _settings; }
 
+// Formats store_settings.operating_hours (a JSONB object
+// {days:[0..6], open:"HH:MM", close:"HH:MM"}) into a human string like
+// "Open daily · 2:00 PM–12:00 AM". Interpolating the raw object used to render
+// the literal "Hours: [object Object]" on the closed card. Returns '' for a
+// missing/invalid schedule so nothing renders.
+function formatOperatingHours(oh) {
+  if (!oh) return '';
+  if (typeof oh === 'string') return oh.trim();      // legacy plain-text value
+  if (typeof oh !== 'object') return '';
+  const to12h = (hhmm) => {
+    const parts = String(hhmm).split(':');
+    const h = Number(parts[0]); const m = Number(parts[1]);
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+    const ap = h >= 12 ? 'PM' : 'AM';
+    const h12 = (h % 12) === 0 ? 12 : (h % 12);   // 0 and 24 -> 12 (midnight/noon)
+    return `${h12}:${String(m).padStart(2, '0')} ${ap}`;
+  };
+  const o = to12h(oh.open); const c = to12h(oh.close);
+  if (!o || !c) return '';
+  const DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const days = Array.isArray(oh.days) ? [...new Set(oh.days)].sort((a, b) => a - b) : [];
+  let dayLabel;
+  if (days.length === 7) dayLabel = 'Open daily';
+  else if (days.length) dayLabel = 'Open ' + days.map(d => DAY[d]).filter(Boolean).join(', ');
+  else dayLabel = 'Open';
+  return `${dayLabel} · ${o}–${c}`;
+}
+
 export async function loadStoreSettings() {
   try {
-    const { data } = await sb().from('store_settings').select('*').limit(1).single();
+    // Explicit safe column list — NEVER select('*') here: store_settings holds
+    // secrets (telegram_bot_token, telegram_chat_id, paymongo_public_key) that
+    // must not be shipped to the browser. The edge functions read those via the
+    // service role; the storefront only needs the public-facing fields below.
+    const { data } = await sb().from('store_settings').select(
+      'id, store_name, store_address, store_lat, store_lng, contact_number, store_email, ' +
+      'banner_url, gcash_number, maya_number, store_online, updated_at, gcash_qr_url, maya_qr_url, ' +
+      'bank_qr_url, topbar_banner_url, side_left_banner_url, side_right_banner_url, ' +
+      'delivery_rate_multiplier, crypto_enabled, crypto_usdt_address, crypto_usdt_network, ' +
+      'store_tagline, store_phone, store_logo_url, gcash_name, bank_name, bank_account, ' +
+      'bank_account_name, delivery_fee, free_delivery_min, min_order_amount, operating_hours, ' +
+      'is_open, webauthn_rp_id, theme_color, gcash_enabled, maya_enabled, free_delivery_enabled, ' +
+      'closed_message'
+    ).limit(1).single();
     _settings = data || null;
   } catch(e) { console.warn('[banners] store_settings load failed', e); _settings = null; }
 
@@ -25,8 +66,12 @@ export async function loadStoreSettings() {
     const loginScreen  = document.getElementById('loginScreen');
     const msgEl        = document.getElementById('storeClosedMsg');
     const hoursEl      = document.getElementById('storeClosedHours');
-    if (msgEl && settings?.closed_message)   msgEl.textContent = settings.closed_message;
-    if (hoursEl && settings?.operating_hours) hoursEl.textContent = `Hours: ${settings.operating_hours}`;
+    if (msgEl && settings?.closed_message) msgEl.textContent = settings.closed_message;
+    if (hoursEl) {
+      const hrs = formatOperatingHours(settings?.operating_hours);
+      hoursEl.textContent = hrs;
+      hoursEl.hidden = !hrs;
+    }
     if (loginScreen)  loginScreen.style.display = 'none';
     if (closedScreen) closedScreen.hidden = false;
     // Stop boot — throw so the caller's boot sequence halts gracefully

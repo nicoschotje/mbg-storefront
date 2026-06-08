@@ -39,7 +39,7 @@ const COORDS_KEY = 'mbg_delivery_coords';
 
 // Nominatim politeness: only search once the query is meaningful, debounce, and
 // abort any in-flight request when the customer keeps typing.
-const MIN_QUERY_LEN = 4;
+const MIN_QUERY_LEN = 3;
 const SEARCH_DEBOUNCE_MS = 350;
 
 let _selectedCoords = null;   // { lat, lng } once a place is picked / pin dragged
@@ -160,10 +160,26 @@ function renderSuggestions(field, results) {
   const box = getSuggestBox(field);
   if (!box) return;
   _lastResults = results;
-  if (!results.length) { box.hidden = true; box.innerHTML = ''; return; }
+  if (!results.length) {
+    // Show a visible, non-clickable empty state instead of silently hiding —
+    // "no results" previously felt like the field was broken.
+    box.innerHTML = '<li class="addr-suggest-empty" aria-disabled="true">No matches — keep typing, or drop your pin on the map.</li>';
+    box.hidden = false;
+    return;
+  }
   box.innerHTML = results.map((r, i) =>
     `<li class="addr-suggest-item" role="option" data-idx="${i}">${escapeHtml(r.display_name)}</li>`
   ).join('');
+  box.hidden = false;
+}
+
+// Shows a non-clickable status row (lookup failed / rate-limited). Clears the
+// cached results so a stray pointerdown can't select a stale suggestion.
+function showSuggestMessage(field, msg) {
+  const box = getSuggestBox(field);
+  if (!box) return;
+  _lastResults = [];
+  box.innerHTML = `<li class="addr-suggest-empty" aria-disabled="true">${escapeHtml(msg)}</li>`;
   box.hidden = false;
 }
 
@@ -176,20 +192,30 @@ async function runSearch(field) {
   _searchAbort = new AbortController();
 
   try {
+    // viewbox biases results toward the Philippines bounding box
+    // (lon/lat: west,north,east,south) on top of countrycodes=ph, so local
+    // streets rank above same-named places elsewhere.
     const url = 'https://nominatim.openstreetmap.org/search'
       + '?format=jsonv2&addressdetails=1&countrycodes=ph&limit=5&accept-language=en'
+      + '&viewbox=116.9,21.1,126.6,4.5'
       + '&q=' + encodeURIComponent(q);
     const res = await fetch(url, { signal: _searchAbort.signal, headers: { 'Accept': 'application/json' } });
-    if (!res.ok) { hideSuggestions(field); return; }
-    const results = await res.json();
     // The field may have been re-rendered while the request was in flight —
     // re-resolve the live node before painting.
     const live = document.getElementById(FIELD_ID) || field;
+    if (!res.ok) {
+      showSuggestMessage(live, res.status === 429
+        ? 'Too many lookups — wait a moment and try again.'
+        : 'Address lookup failed — try again, or drop your pin on the map.');
+      return;
+    }
+    const results = await res.json();
     renderSuggestions(live, Array.isArray(results) ? results : []);
   } catch (e) {
     if (e.name !== 'AbortError') {
       console.warn('[address] search failed', e);
-      hideSuggestions(field);
+      const live = document.getElementById(FIELD_ID) || field;
+      showSuggestMessage(live, 'Address lookup failed — try again, or drop your pin on the map.');
     }
   }
 }

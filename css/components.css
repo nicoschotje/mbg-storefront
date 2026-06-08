@@ -1146,10 +1146,11 @@ body.modal-open .appFooter {
   margin: 0 0 0.5rem;
 }
 .store-closed-hours {
-  color: var(--gold);
+  color: rgba(255, 255, 255, 0.55);
   font-size: 0.85rem;
   font-style: italic;
 }
+.store-closed-hours[hidden] { display: none; }
 
 /* ── FEATURED PRODUCTS ────────────────────────── */
 .featured-wrap {
@@ -1351,6 +1352,41 @@ body.modal-open .appFooter {
 
 /* ── CHECKOUT ADDRESS MAP (Leaflet) ────────────── */
 .address-map-wrap { margin: 14px 0; }
+.address-map-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.addr-locate-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--green-mid);
+  color: var(--cream);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  min-height: 44px;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+.addr-locate-btn:active { background: var(--green); }
+.addr-locate-btn:disabled { opacity: 0.6; cursor: default; }
+.map-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 1rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
 .address-map {
   width: 100%;
   height: 220px;
@@ -1363,11 +1399,12 @@ body.modal-open .appFooter {
   .address-map { height: 200px; }
 }
 .map-caption {
+  flex: 1 1 auto;
   font-size: 11px;
   color: var(--text-muted);
   font-style: italic;
-  text-align: center;
-  margin-top: 6px;
+  text-align: right;
+  margin: 0;
 }
 
 /* ── ADDRESS AUTOCOMPLETE ─────────────────────── */
@@ -1404,6 +1441,15 @@ body.modal-open .appFooter {
 .addr-suggest-item:active {
   background: rgba(55, 92, 59, 0.10);
   color: var(--green-dark);
+}
+/* Non-clickable status row (no matches / lookup failed / rate-limited). */
+.addr-suggest-empty {
+  padding: 0.6rem 0.8rem;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+  font-style: italic;
+  cursor: default;
 }
 
 /* ── USDT PAYMENT BLOCK ──────────────────────── */

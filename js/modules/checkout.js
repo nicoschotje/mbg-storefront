@@ -4,11 +4,11 @@
 import { sb, logActivity } from '../core/supabase.js';
 import { esc, formatPrice, normalisePhone, isValidPHPhone, openOverlay, closeOverlay, showToast } from '../core/utils.js';
 import { EDGE_URL, SUPABASE_ANON, PAYMENT_METHODS } from '../core/config.js';
-import { getStoreSettings } from './banners.js?v=20260518-mobile';
-import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo, priceForItem, displayNameForItem } from './cart.js?v=20260605-uifix';
+import { getStoreSettings } from './banners.js?v=20260608-deepfix';
+import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo, priceForItem, displayNameForItem } from './cart.js?v=20260608-deepfix';
 import { getSession, getAuthPhone } from '../core/auth.js?v=20260520-polish';
-import { getSelectedCoords } from './address.js?v=20260605-uifix';
-import { initAddressMap } from './leaflet-map.js?v=20260605-uifix';
+import { getSelectedCoords } from './address.js?v=20260608-deepfix';
+import { initAddressMap } from './leaflet-map.js?v=20260608-deepfix';
 import { calculateDelivery } from './delivery.js?v=20260518-mobile';
 
 let _selectedPay = 'gcash';
@@ -236,8 +236,11 @@ function renderCheckout(host, session) {
           <input id="coPostal" type="text" inputmode="numeric" autocomplete="postal-code" placeholder="1605" value="${esc(valPostal)}">
         </label>
         <div class="address-map-wrap">
+          <div class="address-map-toolbar">
+            <button type="button" id="addrLocateBtn" class="addr-locate-btn">📍 Use my location</button>
+            <span class="map-caption">Tap the map to drop your pin · drag to fine-tune</span>
+          </div>
           <div id="addr-map" class="address-map"></div>
-          <p class="map-caption">Drag the pin to adjust if the location is off</p>
         </div>
         <label class="field">
           <span>Delivery notes (optional)</span>

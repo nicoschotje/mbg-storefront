@@ -2,7 +2,7 @@
 import { sb } from '../core/supabase.js';
 import { esc, formatPrice, openOverlay, closeOverlay, showToast } from '../core/utils.js';
 import { DEFAULT_FREE_DELIVERY_THRESHOLD } from '../core/config.js';
-import { getStoreSettings } from './banners.js?v=20260518-mobile';
+import { getStoreSettings } from './banners.js?v=20260608-deepfix';
 
 // In-memory cart  { [productId]: { product, qty } }
 let _cart = {};
