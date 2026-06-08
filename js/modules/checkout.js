@@ -379,7 +379,7 @@ function renderPayInfo(box, method, totalPHP) {
       <h4>Bank Transfer</h4>
       <div class="pay-row"><span>Bank</span><b>${esc(ss?.bank_name || '—')}</b></div>
       <div class="pay-row"><span>Account name</span><b>${esc(ss?.bank_account_name || ss?.store_name || 'Mr. Beanies Greenies')}</b></div>
-      <div class="pay-row"><span>Account number</span><b>${esc(ss?.bank_account_number || '—')}</b></div>
+      <div class="pay-row"><span>Account number</span><b>${esc(ss?.bank_account || ss?.bank_account_number || '—')}</b></div>
       ${ss?.bank_qr_url ? `<img class="pay-qr" src="${esc(ss.bank_qr_url)}" alt="Bank QR"/>` : ''}
       <p class="pay-note">After transferring, upload your receipt below.</p>
       <input type="file" id="receiptFile" accept="image/png,image/jpeg,image/jpg,image/webp"/>
@@ -394,29 +394,48 @@ function renderPayInfo(box, method, totalPHP) {
   box.innerHTML = '';
 }
 
+// Maps the owner-configured USDT network (store_settings.crypto_usdt_network,
+// e.g. "ERC-20") to a display label + brand colour. Defaults to ERC-20 because
+// the configured wallet is an Ethereum 0x… address.
+function usdtNetworkInfo(raw) {
+  const key = String(raw || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const MAP = {
+    erc20:    { label: 'ERC-20 (Ethereum)',        color: '#627EEA' },
+    eth:      { label: 'ERC-20 (Ethereum)',        color: '#627EEA' },
+    ethereum: { label: 'ERC-20 (Ethereum)',        color: '#627EEA' },
+    trc20:    { label: 'TRC-20 (Tron)',            color: '#EB0029' },
+    tron:     { label: 'TRC-20 (Tron)',            color: '#EB0029' },
+    bep20:    { label: 'BEP-20 (BNB Smart Chain)', color: '#F0B90B' },
+    bsc:      { label: 'BEP-20 (BNB Smart Chain)', color: '#F0B90B' },
+    polygon:  { label: 'Polygon',                  color: '#8247E5' },
+    matic:    { label: 'Polygon',                  color: '#8247E5' },
+    solana:   { label: 'Solana',                   color: '#14F195' },
+    sol:      { label: 'Solana',                   color: '#14F195' },
+  };
+  return MAP[key] || { label: raw ? String(raw) : 'ERC-20 (Ethereum)', color: '#627EEA' };
+}
+
 // ── USDT payment rendering ──────────────────────────────────
 function renderUSDTPayment(box) {
   if (!box) return;
   const ss = getStoreSettings();
-  const networks = [
-    { id: 'erc20',   label: 'ERC-20 (Ethereum)', color: '#627EEA' },
-    { id: 'trc20',   label: 'TRC-20 (TRON)',     color: '#EB0029' },
-    { id: 'bep20',   label: 'BEP-20 (BSC)',      color: '#F0B90B' },
-    { id: 'polygon', label: 'Polygon (MATIC)',   color: '#8247E5' },
-  ];
+  // Show ONLY the network the owner configured (crypto_usdt_network). The old
+  // hard-coded 4-network picker let a customer choose TRC-20 (Tron) while the
+  // wallet is an Ethereum 0x… address — sending on the wrong chain loses funds
+  // permanently. The address is fixed, so the network is informational and must
+  // reflect what the owner actually accepts.
+  const netInfo       = usdtNetworkInfo(ss?.crypto_usdt_network);
   const walletAddress = ss?.crypto_usdt_address || ss?.usdt_wallet_address || '';
   const qrUrl         = ss?.crypto_qr_url || ss?.usdt_qr_url || '';
   box.innerHTML = `<div class="pay-info usdt-block">
     <h4>USDT Payment</h4>
     <div class="usdt-rate" id="usdtRate">Fetching live rate…</div>
-    <div class="usdt-network-label">Select network:</div>
+    <div class="usdt-network-label">Network</div>
     <div class="usdt-network-grid">
-      ${networks.map((n, i) => `
-        <label class="usdt-network-option${i === 0 ? ' selected' : ''}">
-          <input type="radio" name="usdtNetwork" value="${esc(n.id)}" ${i === 0 ? 'checked' : ''}/>
-          <span class="usdt-network-dot" style="background:${esc(n.color)}"></span>
-          <span class="usdt-network-name">${esc(n.label)}</span>
-        </label>`).join('')}
+      <div class="usdt-network-option selected" aria-readonly="true">
+        <span class="usdt-network-dot" style="background:${esc(netInfo.color)}"></span>
+        <span class="usdt-network-name">${esc(netInfo.label)}</span>
+      </div>
     </div>
     ${qrUrl ? `<img class="usdt-qr" src="${esc(qrUrl)}" alt="USDT QR code" loading="lazy"/>` : ''}
     <div class="usdt-address-wrap">
@@ -430,14 +449,6 @@ function renderUSDTPayment(box) {
 
   ensureQrLightbox();
   wireQrLightboxTriggers(box);
-
-  // Network selection highlight
-  box.querySelectorAll('.usdt-network-option').forEach(opt => {
-    opt.addEventListener('click', () => {
-      box.querySelectorAll('.usdt-network-option').forEach(o => o.classList.remove('selected'));
-      opt.classList.add('selected');
-    });
-  });
 
   // Copy wallet address to clipboard
   box.querySelector('#usdtCopyBtn')?.addEventListener('click', async () => {
