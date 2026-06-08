@@ -1,15 +1,42 @@
 /* MBG Storefront v2 — Banners + Announcements + Store Settings */
-import { sb } from '../core/supabase.js';
-import { esc } from '../core/utils.js';
-import { FALLBACK_HERO, BRAND_NAME } from '../core/config.js';
+import { sb } from '../core/supabase.js?v=20260608-audit';
+import { esc } from '../core/utils.js?v=20260608-audit';
+import { FALLBACK_HERO, BRAND_NAME } from '../core/config.js?v=20260608-audit';
 
 let _settings = null;
 
 export function getStoreSettings() { return _settings; }
 
+// Renders the owner's operating_hours into a short readable string. The column is a
+// JSON object ({ open:"14:00", close:"00:00", days:[…] }); fall back to a plain string
+// if a future row stores one, and to '' if there's nothing usable.
+function formatOperatingHours(oh) {
+  if (!oh) return '';
+  if (typeof oh === 'string') return oh;
+  if (typeof oh === 'object' && (oh.open || oh.close)) {
+    return `${oh.open || '—'}–${oh.close || '—'}`;
+  }
+  return '';
+}
+
+// SECURITY: never `select('*')` here. store_settings also holds the Telegram
+// bot token (a secret) and the owner's chat id — `select('*')` over the anon
+// client shipped those to every visitor. Select only the non-secret columns the
+// storefront actually needs. (Every column listed is confirmed to exist; adding a
+// non-existent column would make PostgREST reject the whole request.)
+const STORE_SETTINGS_COLUMNS = [
+  'id', 'store_name', 'store_online', 'is_open', 'operating_hours', 'topbar_banner_url',
+  'free_delivery_min', 'free_delivery_enabled', 'delivery_fee', 'delivery_rate_multiplier',
+  'store_lat', 'store_lng',
+  'gcash_enabled', 'gcash_number', 'gcash_qr_url',
+  'maya_enabled', 'maya_number', 'maya_qr_url',
+  'bank_name', 'bank_account', 'bank_account_name', 'bank_qr_url',
+  'crypto_enabled', 'crypto_usdt_address', 'crypto_usdt_network'
+].join(', ');
+
 export async function loadStoreSettings() {
   try {
-    const { data } = await sb().from('store_settings').select('*').limit(1).single();
+    const { data } = await sb().from('store_settings').select(STORE_SETTINGS_COLUMNS).limit(1).single();
     _settings = data || null;
   } catch(e) { console.warn('[banners] store_settings load failed', e); _settings = null; }
 
@@ -26,7 +53,10 @@ export async function loadStoreSettings() {
     const msgEl        = document.getElementById('storeClosedMsg');
     const hoursEl      = document.getElementById('storeClosedHours');
     if (msgEl && settings?.closed_message)   msgEl.textContent = settings.closed_message;
-    if (hoursEl && settings?.operating_hours) hoursEl.textContent = `Hours: ${settings.operating_hours}`;
+    // operating_hours is a JSON object ({ days, open, close }) on this project, not a
+    // string — interpolating it directly printed "Hours: [object Object]". Format it.
+    const hrs = formatOperatingHours(settings?.operating_hours);
+    if (hoursEl && hrs) hoursEl.textContent = `Hours: ${hrs}`;
     if (loginScreen)  loginScreen.style.display = 'none';
     if (closedScreen) closedScreen.hidden = false;
     // Stop boot — throw so the caller's boot sequence halts gracefully
@@ -111,7 +141,7 @@ export function renderAnnouncements(targetEl, anns) {
 }
 
 // ── Render category banner block ────────────────────────────
-import { FALLBACK_CATEGORY_BANNERS } from '../core/config.js';
+import { FALLBACK_CATEGORY_BANNERS } from '../core/config.js?v=20260608-audit';
 export function renderCategoryBanner(category, banner) {
   const url = banner?.image_url || banner?.media_url || FALLBACK_CATEGORY_BANNERS[category.name] || FALLBACK_CATEGORY_BANNERS['Flower'];
   const words = String(category.name || 'Selection').split(' ');

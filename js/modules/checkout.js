@@ -1,15 +1,15 @@
 /* MBG Storefront v2 — Checkout
  * Posts orders via the place-order edge function (matches old storefront).
  */
-import { sb, logActivity } from '../core/supabase.js';
-import { esc, formatPrice, normalisePhone, isValidPHPhone, openOverlay, closeOverlay, showToast } from '../core/utils.js';
-import { EDGE_URL, SUPABASE_ANON, PAYMENT_METHODS } from '../core/config.js';
-import { getStoreSettings } from './banners.js?v=20260518-mobile';
-import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo, priceForItem, displayNameForItem } from './cart.js?v=20260605-uifix';
-import { getSession, getAuthPhone } from '../core/auth.js?v=20260520-polish';
-import { getSelectedCoords } from './address.js?v=20260605-uifix';
-import { initAddressMap } from './leaflet-map.js?v=20260605-uifix';
-import { calculateDelivery } from './delivery.js?v=20260518-mobile';
+import { sb, logActivity } from '../core/supabase.js?v=20260608-audit';
+import { esc, formatPrice, normalisePhone, isValidPHPhone, openOverlay, closeOverlay, showToast } from '../core/utils.js?v=20260608-audit';
+import { EDGE_URL, SUPABASE_ANON, PAYMENT_METHODS } from '../core/config.js?v=20260608-audit';
+import { getStoreSettings } from './banners.js?v=20260608-audit';
+import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo, priceForItem, displayNameForItem } from './cart.js?v=20260608-audit';
+import { getSession, getAuthPhone } from '../core/auth.js?v=20260608-audit';
+import { getSelectedCoords } from './address.js?v=20260608-audit';
+import { initAddressMap } from './leaflet-map.js?v=20260608-audit';
+import { calculateDelivery } from './delivery.js?v=20260608-audit';
 
 let _selectedPay = 'gcash';
 let _selectedZoneId = null;   // null = Within Metro Manila (distance-based fee)
@@ -376,7 +376,10 @@ function renderPayInfo(box, method, totalPHP) {
       <h4>Bank Transfer</h4>
       <div class="pay-row"><span>Bank</span><b>${esc(ss?.bank_name || '—')}</b></div>
       <div class="pay-row"><span>Account name</span><b>${esc(ss?.bank_account_name || ss?.store_name || 'Mr. Beanies Greenies')}</b></div>
-      <div class="pay-row"><span>Account number</span><b>${esc(ss?.bank_account_number || '—')}</b></div>
+      <!-- The live store_settings column is `bank_account`; the old `bank_account_number`
+           name never existed, so the account number always rendered "—". Read the real
+           column first, keep the legacy name as a fallback. -->
+      <div class="pay-row"><span>Account number</span><b>${esc(ss?.bank_account || ss?.bank_account_number || '—')}</b></div>
       ${ss?.bank_qr_url ? `<img class="pay-qr" src="${esc(ss.bank_qr_url)}" alt="Bank QR"/>` : ''}
       <p class="pay-note">After transferring, upload your receipt below.</p>
       <input type="file" id="receiptFile" accept="image/png,image/jpeg,image/jpg,image/webp"/>
