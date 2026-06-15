@@ -54,6 +54,40 @@ export function getCartCount()    { return Object.values(_cart).reduce((s,i)=>s+
 export function getCartProduct(id){ return _cart[id]; }
 export function getAppliedPromo() { return _appliedPromo; }
 
+// ── Quantity limits ─────────────────────────────────────────
+// Customers may order up to 100 of any single item (raised from the old
+// flat 10). Stock is still the hard ceiling: the effective max per line is
+// min(100, available stock). Variants carry their own stock_qty (the parent
+// product's stock_qty is just the rolled-up sum of its variants), so a
+// variant line is capped by its OWN stock, not the parent's.
+export const MAX_QTY_PER_ITEM = 100;
+
+// Remaining stock for a cart line, or null when stock isn't tracked.
+export function availableStockForItem(item) {
+  const raw = (item?.variant && item.variant.stock_qty != null)
+    ? item.variant.stock_qty
+    : (item?.product?.stock_qty ?? item?.product?.stock ?? null);
+  if (raw == null) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Effective max quantity for a line: min(100, stock). Untracked stock → 100.
+export function maxQtyForItem(item) {
+  const stock = availableStockForItem(item);
+  if (stock == null) return MAX_QTY_PER_ITEM;
+  return Math.max(0, Math.min(MAX_QTY_PER_ITEM, Math.floor(stock)));
+}
+
+// Toast shown when a requested quantity is clamped — explains whether the
+// limit was the per-item cap or the remaining stock.
+function notifyClamp(item, cap) {
+  const stock = availableStockForItem(item);
+  showToast(stock != null && cap === stock
+    ? `Only ${stock} left in stock`
+    : `Max ${MAX_QTY_PER_ITEM} per item`);
+}
+
 export function freeDeliveryThreshold() {
   const ss = getStoreSettings();
   return Number(ss?.free_delivery_min) || DEFAULT_FREE_DELIVERY_THRESHOLD;
@@ -96,11 +130,17 @@ export function addToCart(product, qty = 1, variant = null) {
   if (!product || !product.id) return;
   const cartKey = variant ? `${product.id}_${variant.id}` : product.id;
   if (!_cart[cartKey]) _cart[cartKey] = { product, qty: 0, variant: variant || null };
-  _cart[cartKey].qty = Math.max(0, (_cart[cartKey].qty || 0) + qty);
-  if (_cart[cartKey].qty === 0) delete _cart[cartKey];
+  const entry = _cart[cartKey];
+  const cap = maxQtyForItem(entry);
+  const requested = Math.max(0, (entry.qty || 0) + qty);
+  const nextQty = Math.min(requested, cap);
+  const wasClamped = qty > 0 && nextQty < requested;
+  entry.qty = nextQty;
+  if (entry.qty === 0) delete _cart[cartKey];
   persistCart(); // snapshot to localStorage so a refresh doesn't wipe the bag
   emit();
   if (qty > 0) {
+    if (wasClamped) { notifyClamp(entry, cap); return; }
     const label = variant ? `${product.name} — ${variant.name}` : product.name;
     showToast(`${label} added to bag`);
     // Pulse the cart count badge — tactile feedback
@@ -115,13 +155,18 @@ export function addToCart(product, qty = 1, variant = null) {
     }
   }
 }
-export function setQty(productId, qty) {
-  if (!_cart[productId]) return;
-  qty = Math.max(0, Math.floor(qty || 0));
-  if (qty === 0) delete _cart[productId];
-  else _cart[productId].qty = qty;
+// `cartKey` is the composite cart-map key (`<productId>` or `<productId>_<variantId>`).
+export function setQty(cartKey, qty) {
+  const entry = _cart[cartKey];
+  if (!entry) return;
+  const want = Math.max(0, Math.floor(qty || 0));
+  const cap = maxQtyForItem(entry);
+  const capped = Math.min(want, cap);
+  if (capped === 0) delete _cart[cartKey];
+  else entry.qty = capped;
   persistCart(); // mirror the new quantity to localStorage
   emit();
+  if (want > capped) notifyClamp(entry, cap);
 }
 export function removeItem(productId) {
   delete _cart[productId];
@@ -303,9 +348,11 @@ function renderCartDrawer(drawer) {
                 <div class="cart-row-price">${esc(formatPrice(priceForItem(it)))}</div>
               </div>
               <div class="cart-qty">
-                <button class="qb minus" data-id="${esc(key)}">−</button>
-                <span class="qn">${it.qty}</span>
-                <button class="qb plus" data-id="${esc(key)}">+</button>
+                <button class="qb minus" data-id="${esc(key)}" aria-label="Decrease quantity">−</button>
+                <input class="qn-input" type="number" inputmode="numeric"
+                  min="1" max="${maxQtyForItem(it)}" value="${it.qty}"
+                  data-id="${esc(key)}" aria-label="Quantity">
+                <button class="qb plus" data-id="${esc(key)}" aria-label="Increase quantity">+</button>
               </div>
             </div>`;
           }).join('')}
@@ -341,6 +388,15 @@ function renderCartDrawer(drawer) {
     const key = b.dataset.id; const entry = _cart[key];
     if (entry) addToCart(entry.product, -1, entry.variant || null);
   }));
+  // Typed quantity — fires on blur/Enter. setQty clamps to min(100, stock) and
+  // the onCartChange subscriber re-renders the drawer with the corrected value.
+  drawer.querySelectorAll('.qn-input').forEach(inp => {
+    inp.addEventListener('change', () => {
+      let v = parseInt(inp.value, 10);
+      if (!Number.isFinite(v) || v < 1) v = 1;
+      setQty(inp.dataset.id, v);
+    });
+  });
   const applyBtn = drawer.querySelector('#applyPromoBtn');
   applyBtn?.addEventListener('click', () => {
     const v = drawer.querySelector('#promoInput').value;

@@ -9,7 +9,7 @@
  */
 import { sb } from '../core/supabase.js';
 import { esc, formatPrice, openOverlay, closeOverlay, showToast } from '../core/utils.js';
-import { addToCart } from './cart.js?v=20260608-deepfix';
+import { addToCart, MAX_QTY_PER_ITEM } from './cart.js?v=20260608-deepfix';
 
 const STRAIN_META = {
   sativa: { emoji: '☀️', label: 'Sativa' },
@@ -190,7 +190,8 @@ function renderSheet(host, product, variants) {
             <span class="strain-qty-label">Quantity</span>
             <div class="strain-qty-control">
               <button type="button" class="strain-qty-btn" data-delta="-1" aria-label="Decrease">−</button>
-              <span class="strain-qty-value">${qty}</span>
+              <input type="number" class="strain-qty-input" inputmode="numeric"
+                min="1" max="${maxQty()}" value="${qty}" aria-label="Quantity">
               <button type="button" class="strain-qty-btn" data-delta="1" aria-label="Increase">+</button>
             </div>
           </div>
@@ -205,11 +206,11 @@ function renderSheet(host, product, variants) {
   }
 
   // Max selectable qty: a stock-tracked variant caps at its remaining stock
-  // (max 10 per order); untracked variants keep the flat 10 cap.
+  // (up to MAX_QTY_PER_ITEM per order); untracked variants keep the flat cap.
   function maxQty() {
     const sv = selectedVariant();
-    if (sv && sv.stock_qty != null) return Math.max(1, Math.min(10, sv.stock_qty));
-    return 10;
+    if (sv && sv.stock_qty != null) return Math.max(1, Math.min(MAX_QTY_PER_ITEM, sv.stock_qty));
+    return MAX_QTY_PER_ITEM;
   }
 
   function wire() {
@@ -245,6 +246,20 @@ function renderSheet(host, product, variants) {
       });
     });
 
+    // Typed quantity — clamp into [1, maxQty()] on blur/Enter. We update the
+    // input value and CTA price IN PLACE rather than repaint()ing, so the
+    // "Add to Cart" button isn't torn out from under a tap that follows editing.
+    const qtyInput = host.querySelector('.strain-qty-input');
+    const commitQty = () => {
+      let v = parseInt(qtyInput.value, 10);
+      if (!Number.isFinite(v) || v < 1) v = 1;
+      qty = Math.min(maxQty(), Math.max(1, v));
+      qtyInput.value = String(qty);
+      const cta = host.querySelector('.strain-add-btn');
+      if (cta && selectedVariantId) cta.textContent = `Add to Cart  ·  ${formatPrice(ctaPrice())}`;
+    };
+    qtyInput?.addEventListener('change', commitQty);
+
     host.querySelector('.strain-add-btn')?.addEventListener('click', () => {
       const v = selectedVariant();
       if (!v) return;
@@ -253,6 +268,9 @@ function renderSheet(host, product, variants) {
         name: v.name,
         strain_type: v.strain_type || null,
         price_override: v.price_override != null ? Number(v.price_override) : null,
+        // Carry the variant's own stock so the cart drawer can keep enforcing
+        // min(100, stock) on this line after the sheet closes.
+        stock_qty: v.stock_qty != null ? Number(v.stock_qty) : null,
       });
       closeStrainPicker();
     });

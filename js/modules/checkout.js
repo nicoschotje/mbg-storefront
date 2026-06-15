@@ -7,9 +7,10 @@ import { EDGE_URL, SUPABASE_ANON, PAYMENT_METHODS } from '../core/config.js';
 import { getStoreSettings } from './banners.js?v=20260608-deepfix';
 import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo, priceForItem, displayNameForItem } from './cart.js?v=20260608-deepfix';
 import { getSession, getAuthPhone } from '../core/auth.js?v=20260520-polish';
-import { getSelectedCoords } from './address.js?v=20260608-deepfix';
+import { getSelectedCoords, setSelectedCoords } from './address.js?v=20260608-deepfix';
 import { initAddressMap } from './leaflet-map.js?v=20260608-deepfix';
 import { calculateDelivery } from './delivery.js?v=20260518-mobile';
+import { getSavedAddresses, saveAddress, deleteAddress, addressLabel } from './saved-address.js?v=20260615-savedaddr';
 
 let _selectedPay = 'gcash';
 let _selectedZoneId = null;   // null = Within Metro Manila (distance-based fee)
@@ -195,6 +196,7 @@ function renderCheckout(host, session) {
 
       <section class="check-section">
         <h3>Your details</h3>
+        <div id="savedAddrBar" class="saved-addr-bar" hidden></div>
         <label class="field">
           <span>Full name</span>
           <input id="coName" type="text"
@@ -246,6 +248,7 @@ function renderCheckout(host, session) {
           <span>Delivery notes (optional)</span>
           <input id="coNotes" type="text" placeholder="Landmarks, gate code, etc." value="${esc(valNotes)}">
         </label>
+        <button type="button" id="saveAddrBtn" class="saved-addr-save-btn">💾 Save this address</button>
       </section>
 
       <section class="check-section">
@@ -329,6 +332,87 @@ function renderCheckout(host, session) {
       refreshDelivery(host);
     });
   }
+
+  // Saved addresses: render the "Use saved address" chips and wire the
+  // "Save this address" button.
+  renderSavedAddrBar(host);
+  host.querySelector('#saveAddrBtn')?.addEventListener('click', () => {
+    const get = (id) => (host.querySelector('#' + id)?.value || '').trim();
+    const addr = {
+      name:     get('coName'),
+      phone:    get('coPhone'),
+      street:   get('coStreet'),
+      barangay: get('coBarangay'),
+      city:     get('coCity'),
+      province: get('coProvince'),
+      postal:   get('coPostal'),
+      notes:    get('coNotes'),
+      coords:   getSelectedCoords() || null,
+    };
+    if (!addr.street || !addr.city) {
+      showToast('Enter your street and city before saving.');
+      return;
+    }
+    const saved = saveAddress(addr);
+    if (!saved) { showToast('Could not save this address.'); return; }
+    renderSavedAddrBar(host);
+    // localStorage-backed, per-device — see saved-address.js for the limitation.
+    showToast('Address saved on this device');
+  });
+}
+
+// Renders the row of saved-address chips above the form. Each chip refills the
+// checkout fields with one tap; the × removes it. Hidden when none are saved.
+function renderSavedAddrBar(host) {
+  const bar = host.querySelector('#savedAddrBar');
+  if (!bar) return;
+  const list = getSavedAddresses();
+  if (!list.length) { bar.hidden = true; bar.innerHTML = ''; return; }
+  bar.hidden = false;
+  bar.innerHTML = `
+    <div class="saved-addr-label">Use a saved address</div>
+    <div class="saved-addr-chips">
+      ${list.map(a => `
+        <div class="saved-addr-chip" data-id="${esc(a.id)}">
+          <button type="button" class="saved-addr-use" data-id="${esc(a.id)}">📍 ${esc(addressLabel(a))}</button>
+          <button type="button" class="saved-addr-del" data-id="${esc(a.id)}" aria-label="Remove saved address">×</button>
+        </div>`).join('')}
+    </div>`;
+  bar.querySelectorAll('.saved-addr-use').forEach(btn => btn.addEventListener('click', () => {
+    const a = getSavedAddresses().find(x => x.id === btn.dataset.id);
+    if (a) applySavedAddress(host, a);
+  }));
+  bar.querySelectorAll('.saved-addr-del').forEach(btn => btn.addEventListener('click', () => {
+    deleteAddress(btn.dataset.id);
+    renderSavedAddrBar(host);
+    showToast('Saved address removed');
+  }));
+}
+
+// Fills the checkout fields from a saved address and restores its map pin +
+// delivery coordinates. Field values are set directly (no input events) so the
+// address.js autocomplete listener doesn't wipe the coordinates we restore.
+function applySavedAddress(host, a) {
+  const setVal = (id, v) => { const el = host.querySelector('#' + id); if (el != null) el.value = v || ''; };
+  // Only overwrite identity fields when the saved record actually has them, so
+  // a saved address can't blank out a session-prefilled name/phone.
+  if (a.name)  setVal('coName', a.name);
+  if (a.phone) setVal('coPhone', a.phone);
+  setVal('coStreet', a.street);
+  setVal('coBarangay', a.barangay);
+  setVal('coCity', a.city);
+  setVal('coProvince', a.province);
+  setVal('coPostal', a.postal);
+  setVal('coNotes', a.notes);
+
+  if (a.coords && Number.isFinite(a.coords.lat) && Number.isFinite(a.coords.lng)) {
+    setSelectedCoords(a.coords);
+    document.dispatchEvent(new CustomEvent('mbg:addrPicked', { detail: a.coords }));
+  } else {
+    setSelectedCoords(null);
+  }
+  document.dispatchEvent(new CustomEvent('mbg:deliveryAddrChanged'));
+  showToast('Address filled in');
 }
 
 function ensureQrLightbox() {

@@ -436,6 +436,15 @@
   color: var(--green-dark);
 }
 .cart-qty .qn { min-width: 18px; text-align: center; font-weight: 700; }
+.cart-qty .qn-input {
+  width: 42px; text-align: center; font-weight: 700;
+  border: none; background: transparent; color: var(--green-dark);
+  font-size: 0.95rem; padding: 0;
+  -moz-appearance: textfield; appearance: textfield;
+}
+.cart-qty .qn-input:focus { outline: none; }
+.cart-qty .qn-input::-webkit-outer-spin-button,
+.cart-qty .qn-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
 .promo-row {
   display: grid; grid-template-columns: 1fr auto;
@@ -1861,6 +1870,21 @@ body.modal-open .appFooter {
   font-weight: 700;
   font-size: 0.95rem;
 }
+.strain-qty-input {
+  width: 50px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  border: none;
+  background: var(--white);
+  color: var(--green-dark);
+  border-radius: 10px;
+  padding: 0.28rem 0;
+  -moz-appearance: textfield; appearance: textfield;
+}
+.strain-qty-input:focus { outline: none; }
+.strain-qty-input::-webkit-outer-spin-button,
+.strain-qty-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
 .strain-add-btn {
   width: 100%;
@@ -1888,3 +1912,57 @@ body.modal-open .appFooter {
   box-shadow: 0 2px 0 rgba(0,0,0,0.20);
   pointer-events: none;
 }
+
+/* ── Saved delivery addresses (checkout) ─────────────────────── */
+.saved-addr-bar { margin: 0 0 0.9rem; }
+.saved-addr-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 0.45rem;
+}
+.saved-addr-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.saved-addr-chip {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1.5px solid var(--border);
+  border-radius: 50px;
+  overflow: hidden;
+  background: var(--white);
+  max-width: 100%;
+}
+.saved-addr-use {
+  border: none;
+  background: transparent;
+  padding: 0.45rem 0.5rem 0.45rem 0.8rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--green-dark);
+  max-width: 62vw;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.saved-addr-use:active { transform: translateY(1px); }
+.saved-addr-del {
+  border: none;
+  background: transparent;
+  padding: 0 0.7rem;
+  color: var(--text-muted);
+  font-size: 1.05rem;
+  line-height: 1;
+}
+.saved-addr-save-btn {
+  margin-top: 0.5rem;
+  width: 100%;
+  border: 1.5px dashed var(--border);
+  background: transparent;
+  border-radius: 12px;
+  padding: 0.75rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--green-dark);
+}
+.saved-addr-save-btn:active { transform: translateY(1px); }
