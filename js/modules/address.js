@@ -56,6 +56,18 @@ function storeCoords(coords) {
   } catch(_) { /* private mode / quota — fall back to in-memory only */ }
 }
 
+// Programmatically set (or clear) the selected delivery coordinates. Used by
+// the "Use saved address" flow in checkout to restore a saved pin so the
+// delivery quote is accurate. Mirrors into the same localStorage key that
+// getSelectedCoords() reads, keeping address.js the single source of truth.
+export function setSelectedCoords(coords) {
+  if (coords && Number.isFinite(Number(coords.lat)) && Number.isFinite(Number(coords.lng))) {
+    storeCoords({ lat: Number(coords.lat), lng: Number(coords.lng) });
+  } else {
+    storeCoords(null);
+  }
+}
+
 export function getSelectedCoords() {
   try {
     const raw = localStorage.getItem(COORDS_KEY);
