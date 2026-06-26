@@ -20,6 +20,8 @@ const ok = (msg) => { console.log('  ✓ ' + msg); pass++; };
 
 const cart = await import('../js/modules/cart.js');
 const saved = await import('../js/modules/saved-address.js');
+const myOrders = await import('../js/modules/my-orders-store.js');
+const delivery = await import('../js/modules/delivery.js');
 
 // ── CHANGE 1: quantity cap = min(100, stock) ─────────────────────────────────
 console.log('CHANGE 1 — quantity cap (min(100, stock)):');
@@ -111,5 +113,41 @@ const list = saved.getSavedAddresses();
 saved.deleteAddress(list[0].id);
 assert.equal(saved.getSavedAddresses().length, 1);
 ok('deleteAddress removes one entry');
+
+// ── CHANGE 3: my-orders-store (Phase 1 — device order ids, no phone) ─────────
+console.log('CHANGE 3 — my-orders-store (device order ids):');
+
+assert.deepEqual(myOrders.getMyOrderIds(), []);
+ok('starts empty');
+
+myOrders.rememberMyOrderId('id-aaa');
+myOrders.rememberMyOrderId('id-bbb');
+assert.deepEqual(myOrders.getMyOrderIds(), ['id-bbb', 'id-aaa']);
+ok('newest id first');
+
+myOrders.rememberMyOrderId('id-aaa');
+assert.deepEqual(myOrders.getMyOrderIds(), ['id-aaa', 'id-bbb']);
+ok('re-remembering moves to front, no duplicate');
+
+myOrders.rememberMyOrderId('');
+myOrders.rememberMyOrderId(null);
+assert.equal(myOrders.getMyOrderIds().length, 2);
+ok('empty / null ids are ignored');
+
+// ── CHANGE 4: delivery fee formula (locks the place-order edge-fn mirror) ────
+console.log('CHANGE 4 — delivery fee formula (server mirror lock):');
+
+const QC = { storeLat: 14.6007, storeLng: 121.0827, customerLat: 14.6490, customerLng: 121.0273 };
+assert.equal(delivery.calculateDelivery({ ...QC, subtotal: 1000, surgeMultiplier: 1, freeDeliveryMin: 0, fallbackFee: 50 }).fee, 208);
+ok('~8 km @ surge 1 → ₱208');
+
+assert.equal(delivery.calculateDelivery({ ...QC, subtotal: 1000, surgeMultiplier: 2.5, freeDeliveryMin: 0, fallbackFee: 50 }).fee, 519);
+ok('~8 km @ surge 2.5 → ₱519');
+
+assert.equal(delivery.calculateDelivery({ storeLat: 14.6, storeLng: 121.0, customerLat: null, customerLng: null, subtotal: 100, surgeMultiplier: 1, freeDeliveryMin: 0, fallbackFee: 75 }).fee, 75);
+ok('no coords → flat fallback ₱75');
+
+assert.equal(delivery.calculateDelivery({ ...QC, subtotal: 5000, surgeMultiplier: 1, freeDeliveryMin: 5000, fallbackFee: 50 }).fee, 0);
+ok('subtotal ≥ free_delivery_min → ₱0');
 
 console.log(`\nAll ${pass} assertions passed.`);

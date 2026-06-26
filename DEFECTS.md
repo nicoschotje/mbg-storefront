@@ -7,6 +7,40 @@ Status legend: 🔴 open · 🟡 partial / mitigated · ✅ done
 
 ---
 
+## Phase 1 — account ownership & visibility (Milestones 0 + 1)
+
+### 🟢 D-13 (expected, accepted) — +1 advisor finding for `get_my_orders`
+The Phase 1 migration adds one new `anon_security_definer_function_executable`
+finding for `public.get_my_orders(text, uuid[])` (live advisor 53 → 54). This is
+the irreducible minimum: account-scoped order reads require an anon-callable
+SECURITY DEFINER RPC, and it is the SAME accepted class as the existing storefront
+RPCs — anon-only (PUBLIC/authenticated revoked), `search_path` locked, self-gates
+on the session token / order-id capability, returns customer-safe columns only.
+Not a regression; reviewed and accepted.
+
+### 🔴 D-14 — `orders_anon_cancel_own` still uses the recipient-phone header
+Phase 1 removed the phone-based **read** leak (`orders_anon_select_own`). The
+**cancel** policy `orders_anon_cancel_own` still authorizes an UPDATE (cancel a
+pending/confirmed order) when `customer_phone = x-customer-phone` header. It is an
+UPDATE path (not a read), but a recipient phone can still cancel. Follow-up: gate
+cancel on `order_owner_id = <session>` (logged-in) or an order-id capability, and
+drop the phone header. Left as-is to keep the existing cancel feature working.
+
+### 🟡 D-15 — Backfill of `order_owner_id` runs at live merge, not yet applied
+The conservative backfill (unique normalized-phone match only) is in the migration.
+Live dry-run 2026-06-26: 88 orders → 83 attach to a unique owner, 0 ambiguous, 5
+left unowned (phones with no registered account). It executes when the migration is
+applied to live; verify the post-merge count matches.
+
+### ℹ️ D-16 — Supabase dev-branch migration replay is broken (pre-existing)
+Creating a dev branch lands in `MIGRATIONS_FAILED` (production history fails to
+replay on a fresh branch at the `create_product_variants` migration; later
+migrations incl. Phase 0 don't apply). The Phase 1 DB layer was still validated on
+the branch against the present schema (non-variant paths). Worth fixing the history
+so future branches provision cleanly, independent of Phase 1.
+
+---
+
 ## P0 — Phase 0 anon-exec triage
 
 ### ✅ D-01 — Destructive/admin functions reachable by public anon role

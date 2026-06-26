@@ -18,9 +18,9 @@ export function formatPhone(raw) {
 }
 
 // Strip spaces, dashes, parentheses — but keep the leading + and 0.
-// Existing rows in `orders.customer_phone` are stored as the user typed
-// them ("09175242123", "0923-662-8789"); we don't want to drop that
-// format because tracking.js filters orders by raw phone equality.
+// orders.customer_phone is the recipient/contact number (stored as typed,
+// e.g. "09175242123", "0923-662-8789"); it is NOT used for order visibility
+// any more — My Orders reads by account ownership / order id (see tracking.js).
 export function normalisePhone(raw) {
   if (!raw) return '';
   return String(raw).replace(/[^\d+]/g, '');

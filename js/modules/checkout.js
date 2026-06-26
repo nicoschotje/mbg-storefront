@@ -11,6 +11,7 @@ import { getSelectedCoords, setSelectedCoords } from './address.js?v=20260608-de
 import { initAddressMap } from './leaflet-map.js?v=20260608-deepfix';
 import { calculateDelivery } from './delivery.js?v=20260518-mobile';
 import { getSavedAddresses, saveAddress, deleteAddress, addressLabel } from './saved-address.js?v=20260615-savedaddr';
+import { rememberMyOrderId } from './my-orders-store.js?v=20260626-phase1';
 
 let _selectedPay = 'gcash';
 let _selectedZoneId = null;   // null = Within Metro Manila (distance-based fee)
@@ -624,6 +625,10 @@ async function placeOrder(host) {
     }
 
     const payload = {
+      // Custom session token (NOT a Supabase JWT). place-order resolves the
+      // owning account from this via validate_customer_session and stamps
+      // order_owner_id server-side. The browser never sends an owner id.
+      session_token:    getSession()?.token || null,
       customer_name:    name,
       customer_phone:   phone,
       delivery_address: addr,
@@ -692,21 +697,21 @@ async function placeOrder(host) {
       order_number: data.order_number, total, items_count: items.length, payment_method: _selectedPay
     });
 
+    // Remember this order id on THIS device (unguessable uuid capability) so
+    // My Orders can show it without any phone-based matching, and so it still
+    // appears if the customer later signs in (get_my_orders unions account
+    // orders with these ids).
+    rememberMyOrderId(data.order_id);
+
     // Show success screen immediately with a "pending" verification badge
-    showSuccessScreen(data.order_number, items, total, phone);
+    showSuccessScreen(data.order_number, items, total, data.order_id);
     clearCart();
     closeCheckoutScreen();
 
-    // Remember this phone so My Orders can auto-load even if the customer
-    // navigates there without tapping "Track my orders" (see tracking.js).
-    try { localStorage.setItem('mbg_last_order_phone', phone); } catch(_) {}
-
-    // Tell any already-mounted tracking screen to refetch — without this the
-    // customer would land on a stale list (or worse, "No orders yet") until
-    // the 15s poll catches up. The phone here matches what the order was
-    // inserted with, so RLS lets the new row through on the very next read.
+    // Tell any already-mounted tracking screen to refetch so the new order
+    // shows immediately instead of waiting for the next 15s poll tick.
     document.dispatchEvent(new CustomEvent('mbg:orderPlaced', {
-      detail: { phone, order_number: data.order_number }
+      detail: { order_id: data.order_id, order_number: data.order_number }
     }));
 
     // Verify receipt in background — badge updates when done
@@ -797,7 +802,7 @@ function updateVerificationBadge(orderNum, result) {
 
 
 // ── Success screen ──────────────────────────────────────────
-export function showSuccessScreen(orderNum, items, total, phone) {
+export function showSuccessScreen(orderNum, items, total, orderId) {
   let host = document.getElementById('successScreen');
   if (!host) {
     host = document.createElement('section');
@@ -829,8 +834,7 @@ export function showSuccessScreen(orderNum, items, total, phone) {
   host.querySelector('#successTrack')?.addEventListener('click', () => {
     host.classList.remove('open');
     closeOverlay('successScreen');
-    // Hand off the just-placed order's phone so My Orders skips the gate.
-    document.dispatchEvent(new CustomEvent('mbg:openTracking', { detail: { phone } }));
+    document.dispatchEvent(new CustomEvent('mbg:openTracking', { detail: { order_id: orderId } }));
   });
 }
 

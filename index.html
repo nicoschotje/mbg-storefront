@@ -197,9 +197,9 @@
     import { loadDiscountRules, bindCartTriggers, getCartCount, onCartChange } from './js/modules/cart.js?v=20260608-deepfix';
     import { initBottomNav } from './js/modules/bottomnav.js?v=20260519-orders-tab';
     import './js/modules/delivery.js?v=20260518-mobile';
-    import { openCheckoutScreen } from './js/modules/checkout.js?v=20260608-deepfix2';
+    import { openCheckoutScreen } from './js/modules/checkout.js?v=20260626-phase1';
     import './js/modules/address.js?v=20260608-deepfix';
-    import { openTrackingScreen } from './js/modules/tracking.js?v=20260520-iphone-fix';
+    import { openTrackingScreen } from './js/modules/tracking.js?v=20260626-phase1';
     import { loadTier, renderTierBadge } from './js/modules/tiers.js?v=20260518-mobile';
     import { renderUserMenu } from './js/modules/usermenu.js?v=20260518-mobile';
     import { SW_PATH } from './js/core/config.js?v=20260518-mobile';
@@ -297,7 +297,7 @@
       initBottomNav({
         onShop: () => document.getElementById('productsWrap')
           ?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
-        onOrders: () => openTrackingScreen(getAuthPhone() || ''),
+        onOrders: () => openTrackingScreen(),
         onSignOut: async () => { await logout(); location.reload(); }
       });
 
@@ -317,12 +317,12 @@
 
       // User badge + account dropdown
       renderUserMenu(document.getElementById('userMenu'), {
-        onOrders: () => openTrackingScreen(getAuthPhone() || '')
+        onOrders: () => openTrackingScreen()
       });
 
       // Footer hooks
       document.getElementById('openTrackingLink').addEventListener('click', (e) => {
-        e.preventDefault(); openTrackingScreen(getAuthPhone() || '');
+        e.preventDefault(); openTrackingScreen();
       });
       document.getElementById('logoutLink').addEventListener('click', async (e) => {
         e.preventDefault();
@@ -386,7 +386,7 @@
     onAuthChange(() => {
       renderTierBadge(document.getElementById('tierBadge'));
       renderUserMenu(document.getElementById('userMenu'), {
-        onOrders: () => openTrackingScreen(getAuthPhone() || '')
+        onOrders: () => openTrackingScreen()
       });
     });
 
