@@ -150,4 +150,21 @@ ok('no coords → flat fallback ₱75');
 assert.equal(delivery.calculateDelivery({ ...QC, subtotal: 5000, surgeMultiplier: 1, freeDeliveryMin: 5000, fallbackFee: 50 }).fee, 0);
 ok('subtotal ≥ free_delivery_min → ₱0');
 
+// ── CHANGE 5: addToCart silent + variant (Phase 2 reorder path) ──────────────
+console.log('CHANGE 5 — addToCart silent/variant (reorder):');
+cart.clearCart();
+cart.addToCart({ id: 'rp1', name: 'Reorder Prod', stock_qty: 10 }, 3, null, true);
+assert.equal(cart.getCartProduct('rp1').qty, 3);
+ok('silent add still adds the quantity');
+
+const rv = { id: 'v1', name: '1g', stock_qty: 5 };
+cart.addToCart({ id: 'rp2', name: 'Variant Prod', stock_qty: 99 }, 2, rv, true);
+assert.equal(cart.getCartProduct('rp2_v1').qty, 2);
+ok('silent add preserves the variant (composite cart key)');
+
+cart.addToCart({ id: 'rp2', name: 'Variant Prod', stock_qty: 99 }, 999, rv, true);
+assert.equal(cart.getCartProduct('rp2_v1').qty, 5);
+ok('silent add still clamps to variant stock (5)');
+cart.clearCart();
+
 console.log(`\nAll ${pass} assertions passed.`);

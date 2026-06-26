@@ -39,6 +39,46 @@ async function loadDeliveryZones() {
 }
 loadDeliveryZones();
 
+// Payment methods available given the dashboard's store_settings toggles.
+// Shared by the full form and the quick-confirm card so they never disagree.
+function availablePays(ss) {
+  const cryptoOn = !!(ss?.crypto_enabled && ss?.crypto_usdt_address);
+  return PAYMENT_METHODS.filter(p => {
+    if (p.id === 'usdt')  return cryptoOn;
+    if (p.id === 'gcash') return ss?.gcash_enabled === true;
+    if (p.id === 'maya')  return ss?.maya_enabled === true;
+    return true;
+  });
+}
+
+// Per-account remembered payment method (device-local). The server-side source
+// of truth is store_customers.last_payment_method (written by place_customer_order
+// in Phase 1); this cache lets the UI default the method instantly without an
+// extra round-trip. See DEFECTS.md for the cross-device pre-fill follow-up.
+function lastPayKey(session) { return 'mbg_last_pay::' + (session?.customer_id || 'guest'); }
+function preferredPayMethod(session) {
+  const ss = getStoreSettings();
+  const pays = availablePays(ss);
+  let last = '';
+  try { last = localStorage.getItem(lastPayKey(session)) || ''; } catch(_) {}
+  if (last && pays.some(p => p.id === last)) return last;
+  return pays.some(p => p.id === _selectedPay) ? _selectedPay : (pays[0]?.id || 'gcash');
+}
+function rememberPayMethod(session, method) {
+  try { localStorage.setItem(lastPayKey(session), method); } catch(_) {}
+}
+
+// A logged-in customer with a complete saved address + known name/phone can
+// skip the full form: returns that address, else null (→ full form).
+function quickConfirmAddress(session) {
+  if (!session?.customer_id) return null;
+  const name = session?.display_name;
+  const phone = getAuthPhone() || session?.phone;
+  if (!name || !phone) return null;
+  const list = getSavedAddresses();
+  return list.find(a => a && a.street && a.barangay && a.city && a.province) || null;
+}
+
 export async function openCheckoutScreen() {
   const session = getSession();
   if (getCartItems().length === 0) {
@@ -53,10 +93,94 @@ export async function openCheckoutScreen() {
     document.body.appendChild(host);
   }
   await loadDeliveryZones();
-  renderCheckout(host, session);
+  _selectedPay = preferredPayMethod(session);
+  // Frictionless path: returning customer with a saved address → one-line confirm.
+  const quickAddr = quickConfirmAddress(session);
+  if (quickAddr) renderQuickConfirm(host, session, quickAddr);
+  else renderCheckout(host, session);
   host.classList.add('open');
   document.body.classList.add('lock-scroll');
   openOverlay('checkoutScreen', () => closeCheckoutScreen());
+}
+
+// One-line confirm card for returning customers. Reuses placeOrder() unchanged
+// by rendering the same #co* fields as hidden inputs (pre-filled from the saved
+// address + session). "Edit details" expands to the full editable form.
+function renderQuickConfirm(host, session, addr) {
+  const ss = getStoreSettings();
+  const subtotal = getSubtotal();
+  const disc = getDiscount();
+
+  // Restore the saved address's map pin so the delivery fee is accurate.
+  if (addr.coords && Number.isFinite(addr.coords.lat) && Number.isFinite(addr.coords.lng)) {
+    setSelectedCoords(addr.coords);
+  } else {
+    setSelectedCoords(null);
+  }
+
+  const pays = availablePays(ss);
+  if (!pays.some(p => p.id === _selectedPay) && pays.length) _selectedPay = pays[0].id;
+
+  const delivery = computeDelivery(ss, subtotal);
+  const total = Math.max(0, subtotal + delivery.fee - disc.amount);
+
+  const name  = session?.display_name || addr.name || '';
+  const phone = getAuthPhone() || session?.phone || addr.phone || '';
+  const fullAddr = [addr.street, addr.barangay, addr.city, addr.province]
+    .filter(Boolean).join(', ') + (addr.postal ? ' ' + addr.postal : '');
+
+  host.innerHTML = `
+    <div class="checkout-inner">
+      <header class="checkout-header">
+        <button class="checkout-back" aria-label="Back">←</button>
+        <h2>Checkout</h2>
+        <span class="checkout-spacer"></span>
+      </header>
+
+      <section class="check-section quick-confirm">
+        <h3>Confirm &amp; pay</h3>
+        <div class="qc-line">📍 Deliver to <b>${esc(fullAddr)}</b></div>
+        <div class="qc-line">👤 <b>${esc(name)}</b> · ${esc(phone)}</div>
+        <div class="qc-line">🚚 Delivery <b id="coDeliveryFee">${delivery.fee === 0 ? 'FREE' : esc(formatPrice(delivery.fee))}</b></div>
+        <div class="qc-line qc-total"><span>Total</span><b id="coTotal">${esc(formatPrice(total))}</b></div>
+
+        <div class="qc-paylabel">Pay by</div>
+        <div class="pay-grid">
+          ${pays.map(p => `<button type="button" class="pay-option${p.id === _selectedPay ? ' active' : ''}" data-pay="${esc(p.id)}">
+            <span class="pay-glyph">${esc(p.icon)}</span><span>${esc(p.label)}</span></button>`).join('')}
+        </div>
+        <div id="payInfoBox" class="pay-info-box"></div>
+
+        <button type="button" id="confirmEditBtn" class="field-change-link">✎ Edit address / details</button>
+      </section>
+
+      <!-- Hidden fields consumed by placeOrder() (pre-filled, recipient-only) -->
+      <input type="hidden" id="coName"     value="${esc(name)}">
+      <input type="hidden" id="coPhone"    value="${esc(phone)}">
+      <input type="hidden" id="coStreet"   value="${esc(addr.street || '')}">
+      <input type="hidden" id="coBarangay" value="${esc(addr.barangay || '')}">
+      <input type="hidden" id="coCity"     value="${esc(addr.city || '')}">
+      <input type="hidden" id="coProvince" value="${esc(addr.province || '')}">
+      <input type="hidden" id="coPostal"   value="${esc(addr.postal || '')}">
+      <input type="hidden" id="coNotes"    value="${esc(addr.notes || '')}">
+      <input type="hidden" id="coPromo"    value="${esc(getAppliedPromo() || '')}">
+    </div>
+
+    <div class="checkout-cta-bar">
+      <button id="placeOrderBtn" class="place-order-btn" type="button">Confirm order · ${esc(formatPrice(total))}</button>
+    </div>`;
+
+  host.querySelector('.checkout-back')?.addEventListener('click', closeCheckoutScreen);
+  host.querySelectorAll('.pay-option').forEach(p => p.addEventListener('click', () => {
+    _selectedPay = p.dataset.pay;
+    renderQuickConfirm(host, session, addr);
+  }));
+  renderPayInfo(host.querySelector('#payInfoBox'), _selectedPay, total);
+  host.querySelector('#placeOrderBtn')?.addEventListener('click', () => placeOrder(host));
+  host.querySelector('#confirmEditBtn')?.addEventListener('click', () => {
+    renderCheckout(host, session);
+    applySavedAddress(host, addr); // keep the address when expanding to full edit
+  });
 }
 
 export function closeCheckoutScreen() {
@@ -171,15 +295,8 @@ function renderCheckout(host, session) {
   const delivery = computeDelivery(ss, subtotal);
   const total = Math.max(0, subtotal + delivery.fee - disc.amount);
 
-  // Filter pay methods — hide USDT if not enabled, and hide GCash/Maya
-  // when the dashboard has disabled them via store_settings flags.
-  const cryptoOn = !!(ss?.crypto_enabled && ss?.crypto_usdt_address);
-  const pays = PAYMENT_METHODS.filter(p => {
-    if (p.id === 'usdt')  return cryptoOn;
-    if (p.id === 'gcash') return ss?.gcash_enabled === true;
-    if (p.id === 'maya')  return ss?.maya_enabled === true;
-    return true;
-  });
+  // Filter pay methods by the dashboard's store_settings toggles.
+  const pays = availablePays(ss);
 
   // If the previously selected method was just filtered out, fall back to
   // the first still-available option so the UI and payInfo box stay in sync.
@@ -702,6 +819,8 @@ async function placeOrder(host) {
     // appears if the customer later signs in (get_my_orders unions account
     // orders with these ids).
     rememberMyOrderId(data.order_id);
+    // Remember the chosen payment method so checkout defaults to it next time.
+    rememberPayMethod(getSession(), _selectedPay);
 
     // Show success screen immediately with a "pending" verification badge
     showSuccessScreen(data.order_number, items, total, data.order_id);

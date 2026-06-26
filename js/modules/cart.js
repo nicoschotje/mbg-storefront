@@ -126,7 +126,7 @@ export function getDiscount() {
 // the cart multiple times under different cart keys (one per variant), so
 // the cart key is composite: `<parent_id>_<variant_id>`. For plain products
 // the key stays equal to product.id, preserving every existing call site.
-export function addToCart(product, qty = 1, variant = null) {
+export function addToCart(product, qty = 1, variant = null, silent = false) {
   if (!product || !product.id) return;
   const cartKey = variant ? `${product.id}_${variant.id}` : product.id;
   if (!_cart[cartKey]) _cart[cartKey] = { product, qty: 0, variant: variant || null };
@@ -141,6 +141,7 @@ export function addToCart(product, qty = 1, variant = null) {
   emit();
   if (qty > 0) {
     if (wasClamped) { notifyClamp(entry, cap); return; }
+    if (silent) return; // bulk add (e.g. Reorder) shows its own summary toast
     const label = variant ? `${product.name} — ${variant.name}` : product.name;
     showToast(`${label} added to bag`);
     // Pulse the cart count badge — tactile feedback

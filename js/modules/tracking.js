@@ -13,9 +13,11 @@
  * placed on this device before signing in.
  */
 import { sb } from '../core/supabase.js';
-import { esc, formatPrice, openOverlay, closeOverlay, parseItems, timeAgo } from '../core/utils.js';
+import { esc, formatPrice, openOverlay, closeOverlay, parseItems, timeAgo, showToast } from '../core/utils.js';
 import { getSession } from '../core/auth.js?v=20260520-polish';
 import { getMyOrderIds } from './my-orders-store.js?v=20260626-phase1';
+import { getProducts } from './products.js?v=20260608-deepfix';
+import { addToCart, clearCart } from './cart.js?v=20260608-deepfix';
 
 // Friendly, customer-facing labels for the dashboard's order_status values.
 const STATUS_LABELS = {
@@ -170,8 +172,53 @@ function renderOrders(list, orders) {
       </footer>
       <div class="ord-updated">Updated ${esc(timeAgo(updatedTs))}</div>
       <div class="ord-addr">${esc(o.delivery_address || '')}</div>
+      <button type="button" class="ord-reorder" data-id="${esc(o.id)}">🔁 Reorder</button>
     </article>`;
   }).join('');
+
+  list.querySelectorAll('.ord-reorder').forEach(btn => btn.addEventListener('click', () => {
+    const o = _orders.find(x => x.id === btn.dataset.id);
+    if (o) reorder(o);
+  }));
+}
+
+// ── Reorder ──────────────────────────────────────────────────────────────────
+// Repopulates the cart from a past order using the CURRENT catalog (live price
+// and stock), preserving each line's variant and quantity, then jumps to
+// checkout (which opens the one-line quick-confirm for returning customers).
+// Items whose product/variant no longer exists are skipped with a notice.
+function reorder(order) {
+  const items = parseItems(order?.items);
+  if (!items.length) { showToast('This order has no items to reorder.'); return; }
+  const catalog = getProducts();
+  if (!catalog || !catalog.length) { showToast('Products are still loading — try again in a moment.'); return; }
+
+  const toAdd = [];
+  let skipped = 0;
+  for (const it of items) {
+    const pid = it.product_id || it.id;
+    const product = catalog.find(p => p.id === pid);
+    if (!product || product.is_active === false) { skipped++; continue; }
+    let variant = null;
+    if (it.variant_id) {
+      const variants = Array.isArray(product.variants) ? product.variants : [];
+      variant = variants.find(v => v.id === it.variant_id) || null;
+      if (!variant) { skipped++; continue; } // the specific variant is gone
+    }
+    toAdd.push({ product, variant, qty: Math.max(1, Number(it.qty || it.quantity) || 1) });
+  }
+
+  if (!toAdd.length) { showToast('Sorry — those items are no longer available.'); return; }
+
+  clearCart();
+  let added = 0;
+  for (const t of toAdd) { addToCart(t.product, t.qty, t.variant, true); added++; }
+
+  closeTrackingScreen();
+  showToast(skipped
+    ? `Reordered ${added} item${added > 1 ? 's' : ''} · ${skipped} no longer available`
+    : `Reordered ${added} item${added > 1 ? 's' : ''}`);
+  document.dispatchEvent(new CustomEvent('mbg:openCheckout'));
 }
 
 document.addEventListener('mbg:openTracking', () => openTrackingScreen());
