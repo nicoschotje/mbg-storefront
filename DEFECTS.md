@@ -9,6 +9,28 @@ Status legend: 🔴 open · 🟡 partial / mitigated · ✅ done
 
 ## Phase 2 — frictionless checkout
 
+### 🟠 D-19 — Reference-in-transfer needs a pre-payment order number (two-phase)
+M3 ships "amount-first, reference-after": the payment screen shows the exact
+amount + payee with copy buttons and scan-to-pay QR; the order **reference
+(= order_number)** is shown on the success/status screen *after* placement,
+because today the order (and its number) is only created after the customer pays
+and uploads the receipt. To have the customer put the order_number IN the
+transfer (so OCR matches on reference for the first attempt), the order/number
+must exist before payment → a **two-phase order flow** (create at "Proceed to
+pay", attach receipt after). That changes the live order lifecycle (receipt-less
+"awaiting payment" orders appear in the dashboard queue) and likely needs a small
+dashboard-repo change, so it's parked for an explicit owner decision. The
+verify-payment reference matcher is already deployed and forward-compatible: it
+fires automatically if/when the reference appears on receipts.
+
+### 🟢 D-20 — Amount-embedded QR not available for GCash/Maya P2P
+The brief's "amount-pre-embedded QR where the rail supports it" — GCash/Maya
+personal (P2P) rails don't expose a reliable amount-prefilled QR from a static
+QR image (would need the merchant's QR Ph/EMVCo payload, which we don't hold).
+Per the brief's "Path B honest ceiling," M3 uses the existing static payee QR
+(scan-to-pay) + a prominent **copy-the-exact-amount** button instead. Revisit if
+the owner moves to a QR Ph merchant account.
+
 ### 🟡 D-17 — Cross-device payment-method pre-fill
 M2 defaults the checkout payment method from a per-account **device-local** cache
 (`mbg_last_pay::<customer_id>`). The server-side source of truth
