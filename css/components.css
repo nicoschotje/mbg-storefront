@@ -939,6 +939,63 @@
   margin: 0.9rem 0 0.4rem;
 }
 .quick-confirm #confirmEditBtn { margin-top: 0.8rem; text-align: center; }
+
+/* ── Phase 2 M3: payment send (copy buttons, amount, confirmation) ───────── */
+.pay-amount {
+  display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  background: var(--green-dark);
+  color: var(--green-leaf);
+  border-radius: var(--radius-md);
+  padding: 0.7rem 0.9rem;
+  margin: 0.2rem 0 0.7rem;
+}
+.pay-amount-label { font-size: 0.78rem; opacity: 0.85; }
+.pay-amount-val { font-family: var(--font-display); font-weight: 800; font-size: 1.25rem; margin-right: auto; }
+.copy-btn {
+  background: var(--green-leaf); color: var(--green-dark);
+  border: none; border-radius: 50px; padding: 0.4rem 0.9rem;
+  font-weight: 700; font-size: 0.8rem; cursor: pointer;
+}
+.copy-mini {
+  background: transparent; color: var(--green-dark);
+  border: 1px solid var(--border-light); border-radius: 50px;
+  padding: 0.15rem 0.6rem; font-size: 0.72rem; font-weight: 700; cursor: pointer;
+  margin-left: auto;
+}
+.copy-btn.copied, .copy-mini.copied { background: var(--success); color: var(--white); border-color: var(--success); }
+.pay-row { display: flex; align-items: center; gap: 0.5rem; }
+.pay-qr-wrap { text-align: center; margin: 0.6rem 0; }
+.pay-qr-cap { font-size: 0.72rem; color: var(--text-light); margin-top: 0.3rem; }
+.pay-confirm {
+  background: #FFF7E6; border: 1px solid #E0A800;
+  border-radius: var(--radius-sm); padding: 0.5rem 0.7rem;
+  font-size: 0.8rem; color: #6B5300; margin: 0.5rem 0;
+}
+
+/* ── Phase 2 M3: success-screen reference + payment-status stepper ───────── */
+.success-ref {
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  margin: 0.6rem 0 0.2rem; font-size: 0.85rem; color: var(--text-muted);
+}
+.success-ref b { font-family: var(--font-display); color: var(--text); }
+.pay-status { margin: 0.7rem 0; }
+.pay-status-steps {
+  display: flex; align-items: center; justify-content: center; gap: 0.3rem;
+  font-size: 0.7rem; color: var(--text-light); margin-bottom: 0.45rem;
+}
+.ps-step { padding: 0.15rem 0.55rem; border-radius: 50px; background: var(--border-light); }
+.ps-step.active { background: #2A5A8A; color: var(--white); }
+.ps-step.done   { background: var(--success); color: var(--white); }
+.ps-step.warn   { background: var(--danger); color: var(--white); }
+
+/* ── Phase 2 M3: My Orders payment pill ─────────────────────────────────── */
+.pay-pill {
+  display: inline-block; margin: 0 0 0.4rem;
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em;
+  padding: 0.15rem 0.6rem; border-radius: 50px;
+}
+.pay-pill.paid    { background: var(--success); color: var(--white); }
+.pay-pill.pending { background: #FFF7E6; color: #6B5300; border: 1px solid #E0A800; }
 .ord-time { color: var(--text-light); }
 .ord-addr {
   font-size: 0.74rem;

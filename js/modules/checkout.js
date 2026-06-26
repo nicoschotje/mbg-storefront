@@ -547,6 +547,25 @@ function ensureQrLightbox() {
   });
 }
 
+// Wires every [data-copy] button in a container to copy its value to the
+// clipboard with brief "Copied!" feedback. Used by the payment screen so the
+// customer can one-tap the exact amount and the payee details (Path B).
+function attachCopyButtons(box) {
+  box.querySelectorAll('[data-copy]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const val = btn.getAttribute('data-copy') || '';
+      try {
+        await navigator.clipboard.writeText(val);
+        const old = btn.dataset.label || btn.textContent;
+        btn.dataset.label = old;
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = btn.dataset.label; btn.classList.remove('copied'); }, 1500);
+      } catch(_) { showToast('Copy failed — please select it manually'); }
+    });
+  });
+}
+
 function wireQrLightboxTriggers(box) {
   box.querySelectorAll('.pay-qr, .usdt-qr').forEach(img => {
     img.style.cursor = 'pointer';
@@ -561,31 +580,60 @@ function renderPayInfo(box, method, totalPHP) {
   if (!box) return;
   ensureQrLightbox();
   const ss = getStoreSettings();
+  const amountStr = (Number(totalPHP) || 0).toFixed(2);
+  // Prominent "send exactly ₱X" block with a copy button — the exact amount is
+  // the strongest auto-verification signal (OCR matches on it), so we make it
+  // one-tap to copy. The static payee QR stays for scan-to-pay.
+  const amountBlock = `
+    <div class="pay-amount">
+      <span class="pay-amount-label">Send exactly</span>
+      <b class="pay-amount-val">${esc(formatPrice(totalPHP))}</b>
+      <button type="button" class="copy-btn" data-copy="${esc(amountStr)}">Copy amount</button>
+    </div>`;
+  const payRow = (label, value, copy) => `
+    <div class="pay-row">
+      <span>${esc(label)}</span>
+      <b>${esc(value || '—')}</b>
+      ${value && copy !== false ? `<button type="button" class="copy-mini" data-copy="${esc(value)}">Copy</button>` : ''}
+    </div>`;
+
   if (method === 'gcash' || method === 'maya') {
     const num   = method === 'gcash' ? ss?.gcash_number : ss?.maya_number;
     const qrUrl = method === 'gcash' ? ss?.gcash_qr_url : ss?.maya_qr_url;
-    const name  = ss?.store_name || "Mr. Beanie's Greenies";
+    const label = method === 'gcash' ? 'GCash' : 'Maya';
+    const name  = (method === 'gcash' ? ss?.gcash_name : null) || ss?.store_name || "Mr. Beanie's Greenies";
     box.innerHTML = `<div class="pay-info">
-      <h4>${method === 'gcash' ? 'GCash' : 'Maya'} Payment</h4>
-      <div class="pay-row"><span>Account name</span><b>${esc(name)}</b></div>
-      <div class="pay-row"><span>Number</span><b>${esc(num || 'See QR')}</b></div>
-      ${qrUrl ? `<img class="pay-qr" src="${esc(qrUrl)}" alt="QR code"/>` : ''}
+      <h4>${label} Payment</h4>
+      ${amountBlock}
+      ${payRow(`${label} name`, name)}
+      ${payRow(`${label} number`, num || 'See QR', !!num)}
+      ${qrUrl ? `<div class="pay-qr-wrap"><img class="pay-qr" src="${esc(qrUrl)}" alt="${label} QR code"/>
+        <div class="pay-qr-cap">Scan to pay, then enter the exact amount above</div></div>` : ''}
+      <p class="pay-confirm">⚠️ Confirm you're paying <b>${esc(name)}</b> exactly <b>${esc(formatPrice(totalPHP))}</b>.</p>
       <p class="pay-note">After paying, upload your receipt screenshot below.</p>
       <input type="file" id="receiptFile" accept="image/png,image/jpeg,image/jpg,image/webp"/>
     </div>`;
+    attachCopyButtons(box);
     wireQrLightboxTriggers(box);
     return;
   }
   if (method === 'bank_transfer') {
+    const bankName = ss?.bank_name || '—';
+    const acctName = ss?.bank_account_name || ss?.store_name || "Mr. Beanie's Greenies";
+    const acctNum  = ss?.bank_account || ss?.bank_account_number || '—';
     box.innerHTML = `<div class="pay-info">
       <h4>Bank Transfer</h4>
-      <div class="pay-row"><span>Bank</span><b>${esc(ss?.bank_name || '—')}</b></div>
-      <div class="pay-row"><span>Account name</span><b>${esc(ss?.bank_account_name || ss?.store_name || 'Mr. Beanies Greenies')}</b></div>
-      <div class="pay-row"><span>Account number</span><b>${esc(ss?.bank_account || ss?.bank_account_number || '—')}</b></div>
-      ${ss?.bank_qr_url ? `<img class="pay-qr" src="${esc(ss.bank_qr_url)}" alt="Bank QR"/>` : ''}
+      ${amountBlock}
+      ${payRow('Bank', bankName, false)}
+      ${payRow('Account name', acctName)}
+      ${payRow('Account number', acctNum)}
+      ${ss?.bank_qr_url ? `<div class="pay-qr-wrap"><img class="pay-qr" src="${esc(ss.bank_qr_url)}" alt="Bank QR"/>
+        <div class="pay-qr-cap">Scan to pay, then enter the exact amount above</div></div>` : ''}
+      <p class="pay-confirm">⚠️ Confirm you're transferring <b>${esc(formatPrice(totalPHP))}</b> to <b>${esc(acctName)}</b>.</p>
       <p class="pay-note">After transferring, upload your receipt below.</p>
       <input type="file" id="receiptFile" accept="image/png,image/jpeg,image/jpg,image/webp"/>
     </div>`;
+    attachCopyButtons(box);
     wireQrLightboxTriggers(box);
     return;
   }
@@ -905,17 +953,30 @@ async function verifyReceipt(orderRef, paymentMethod, file) {
 // Updates the verification badge on the success screen once async verify completes.
 function updateVerificationBadge(orderNum, result) {
   const badge = document.getElementById(`verify-badge-${CSS.escape(orderNum)}`);
+  const steps = document.getElementById(`pay-steps-${CSS.escape(orderNum)}`);
+  // Advance the Received → Under review → Confirmed stepper.
+  const setStep = (which) => {
+    if (!steps) return;
+    const [s1, s2, s3] = steps.querySelectorAll('.ps-step');
+    if (!s1) return;
+    s1.className = 'ps-step done';
+    s2.className = 'ps-step ' + (which === 'confirmed' ? 'done' : which === 'mismatch' ? 'warn' : 'active');
+    s3.className = 'ps-step ' + (which === 'confirmed' ? 'done' : '');
+  };
   if (!badge) return;
   const { status, mismatch_reason } = result || {};
   if (status === 'verified') {
     badge.className = 'verify-badge verified';
-    badge.innerHTML = '&#10003; Payment verified';
+    badge.innerHTML = '&#10003; Payment confirmed';
+    setStep('confirmed');
   } else if (status === 'mismatch') {
     badge.className = 'verify-badge mismatch';
     badge.innerHTML = `&#9888; Amount mismatch &mdash; ${mismatch_reason || 'please contact us'}`;
+    setStep('mismatch');
   } else {
     badge.className = 'verify-badge review';
-    badge.innerHTML = '&#8987; Receipt sent for manual review';
+    badge.innerHTML = '&#8987; Under review — we&rsquo;ll confirm shortly';
+    setStep('review');
   }
 }
 
@@ -937,7 +998,22 @@ export function showSuccessScreen(orderNum, items, total, orderId) {
       <p class="success-num">#${esc(orderNum || '—')}</p>
       <div class="success-items">${esc(summary)}</div>
       <div class="success-total">${esc(formatPrice(total))}</div>
-      <div id="verify-badge-${esc(orderNum)}" class="verify-badge pending">&#8987; Verifying your receipt&hellip;</div>
+
+      <div class="success-ref">
+        <span>Payment reference</span>
+        <b>#${esc(orderNum || '—')}</b>
+        ${orderNum ? `<button type="button" class="copy-mini" data-copy="${esc(orderNum)}">Copy</button>` : ''}
+      </div>
+
+      <div class="pay-status">
+        <div class="pay-status-steps" id="pay-steps-${esc(orderNum)}">
+          <span class="ps-step done">Received</span>
+          <span class="ps-step active">Under review</span>
+          <span class="ps-step">Confirmed</span>
+        </div>
+        <div id="verify-badge-${esc(orderNum)}" class="verify-badge pending">&#8987; Checking your payment&hellip;</div>
+      </div>
+
       <p class="success-note">We&rsquo;ll prepare your order and message you when it&rsquo;s on the way. Salamat!</p>
       <div class="success-actions">
         <button id="successKeepShopping" type="button" class="btn-ghost">Keep shopping</button>
@@ -945,6 +1021,7 @@ export function showSuccessScreen(orderNum, items, total, orderId) {
       </div>
     </div>`;
   host.classList.add('open');
+  attachCopyButtons(host);
   openOverlay('successScreen', () => host.classList.remove('open'));
   host.querySelector('#successKeepShopping')?.addEventListener('click', () => {
     host.classList.remove('open');

@@ -159,11 +159,18 @@ function renderOrders(list, orders) {
         <div class="ord-note-label">📦 Message from the store:</div>
         <div class="ord-note-body">${esc(note)}</div>
       </div>` : '';
+    // Payment journey pill (Phase 2 M3): received → under review → confirmed.
+    // payment_status is 'paid' once verify-payment confirms the receipt.
+    const payPill = status === 'cancelled' ? ''
+      : (o.payment_status === 'paid')
+        ? `<span class="pay-pill paid">✓ Payment confirmed</span>`
+        : `<span class="pay-pill pending">⏳ Payment under review</span>`;
     return `<article class="ord-card status-${esc(status)}">
       <header>
         <span class="ord-num">#${esc(o.order_number || (o.id || '').slice(0,8))}</span>
         <span class="ord-badge">${esc(STATUS_LABELS[status] || status)}</span>
       </header>
+      ${payPill}
       ${noteHtml}
       <div class="ord-summary">${esc(summary)}</div>
       <footer>
