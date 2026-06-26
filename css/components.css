@@ -894,6 +894,51 @@
   font-weight: 700;
   color: var(--green-dark);
 }
+
+/* ── Phase 2: Reorder button ───────────────────────────────────────────── */
+.ord-reorder {
+  margin-top: 0.7rem;
+  width: 100%;
+  background: var(--green-dark);
+  color: var(--green-leaf);
+  border: none;
+  border-radius: 50px;
+  padding: 0.55rem 1rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+.ord-reorder:active { transform: translateY(1px); }
+
+/* ── Phase 2: Frictionless quick-confirm card ──────────────────────────── */
+.quick-confirm h3 { margin: 0 0 0.6rem; }
+.qc-line {
+  font-size: 0.92rem;
+  color: var(--text-muted);
+  padding: 0.45rem 0;
+  border-bottom: 1px dashed var(--border-light);
+}
+.qc-line b { color: var(--text); font-weight: 600; }
+.qc-line.qc-total {
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: none;
+  margin-top: 0.3rem;
+  font-size: 1.05rem;
+}
+.qc-line.qc-total b {
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--green-dark);
+}
+.qc-paylabel {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-light);
+  margin: 0.9rem 0 0.4rem;
+}
+.quick-confirm #confirmEditBtn { margin-top: 0.8rem; text-align: center; }
 .ord-time { color: var(--text-light); }
 .ord-addr {
   font-size: 0.74rem;

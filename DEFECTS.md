@@ -7,6 +7,28 @@ Status legend: 🔴 open · 🟡 partial / mitigated · ✅ done
 
 ---
 
+## Phase 2 — frictionless checkout
+
+### 🟡 D-17 — Cross-device payment-method pre-fill
+M2 defaults the checkout payment method from a per-account **device-local** cache
+(`mbg_last_pay::<customer_id>`). The server-side source of truth
+(`store_customers.last_payment_method`, written by `place_customer_order`) is NOT
+surfaced to the client, so on a brand-new device the method falls back to the
+default until the first order. Surfacing it would mean adding
+`last_payment_method` (and `saved_address` consistently) to the login RPC returns
+(`verify_customer_pin`, `webauthn_auth_complete`, `login_with_remember_token`) —
+deliberately deferred to avoid modifying live auth functions and to keep the
+advisor finding count flat. No new advisor finding either way.
+
+### 🟢 D-18 — Quick-confirm needs a complete saved address
+The one-line confirm only appears for a logged-in customer who has a saved address
+(saved-address.js) with street+barangay+city+province. Otherwise checkout falls
+back to the full (pre-filled) form. By design — a partial address can't pass
+placement validation. Saved addresses remain device-local (see Phase 1 note in
+saved-address.js).
+
+---
+
 ## Phase 1 — account ownership & visibility (Milestones 0 + 1)
 
 ### 🟢 D-13 (expected, accepted) — +1 advisor finding for `get_my_orders`
