@@ -1,0 +1,31 @@
+# mbg-storefront CI — syntax-check every storefront JS file and run the
+# Node-based unit tests. No build step: this is a vanilla-JS static site.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Node >= 22.7 detects ES-module syntax in .js files, which this
+          # repo relies on (no package.json / "type" field).
+          node-version: '22'
+
+      - name: Syntax-check all storefront JS
+        run: |
+          set -e
+          for f in $(find js test -name '*.js' -o -name '*.mjs') service-worker.js; do
+            echo "node --check $f"
+            node --check "$f"
+          done
+
+      - name: Run unit tests
+        run: node --import ./test/register.mjs ./test/run-tests.mjs
