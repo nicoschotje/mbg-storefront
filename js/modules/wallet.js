@@ -12,9 +12,11 @@
  * go-live). In BOTH cases this module renders nothing — no menu entry, no
  * screen, no trace. The storefront looks identical to today.
  *
- * Integration is a single listener: bottomnav.js announces the account sheet
- * via the 'mbg:accountSheet' event and this module injects its own entry only
- * when the wallet is confirmed available.
+ * Integration is event-only: the two account menus announce themselves when
+ * they open — bottomnav.js's sheet via 'mbg:accountSheet' (mobile) and
+ * usermenu.js's header dropdown via 'mbg:userMenu' (the only account menu on
+ * desktop, where the bottom nav is display:none) — and this module injects a
+ * "My Wallet" entry into each, only when the wallet is confirmed available.
  *
  * All amounts are integer centavos; rendered as ₱ with 2 decimals.
  */
@@ -98,6 +100,7 @@ async function fetchClients() {
 // ── Boot ──────────────────────────────────────────────────
 export function initWallet() {
   document.addEventListener('mbg:accountSheet', onAccountSheet);
+  document.addEventListener('mbg:userMenu', onUserMenu);
   onAuthChange((session) => {
     if (session) {
       detect(session.token);
@@ -133,12 +136,33 @@ function onAccountSheet(e) {
   btn.type = 'button';
   btn.className = 'acct-item';
   btn.dataset.act = 'wallet';
-  btn.innerHTML = '<span class="acct-ico" aria-hidden="true">💼</span><span>Agent Wallet</span>';
+  btn.innerHTML = '<span class="acct-ico" aria-hidden="true">💼</span><span>My Wallet</span>';
   btn.addEventListener('click', () => {
     close?.();
     openWalletScreen();
   });
   menu.insertBefore(btn, menu.querySelector('.acct-item-danger'));
+}
+
+// Same idea for the header user-badge dropdown (usermenu.js) — the only
+// account menu on desktop viewports. The dropdown re-renders on every auth
+// change, so a stale entry can never survive a logout.
+function onUserMenu(e) {
+  if (!_wallet) return;
+  const { menu, close } = e.detail || {};
+  if (!menu || menu.querySelector('[data-act="wallet"]')) return;
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'user-dropdown-item';
+  btn.dataset.act = 'wallet';
+  btn.setAttribute('role', 'menuitem');
+  btn.textContent = 'My Wallet';
+  btn.addEventListener('click', () => {
+    close?.();
+    openWalletScreen();
+  });
+  menu.insertBefore(btn, menu.querySelector('.user-dropdown-danger'));
 }
 
 // ── Screen ────────────────────────────────────────────────
