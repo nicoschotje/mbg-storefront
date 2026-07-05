@@ -2,11 +2,14 @@
  * All hardcoded constants live here.
  */
 
-// Storefront and dashboard both target the single production Supabase
-// project `mrbeanies-prod` (ref: ihnnipynpdtcbdfbpemq). The anon key is
-// public by design — Row-Level Security in Supabase enforces access.
-export const SUPABASE_URL  = 'https://ihnnipynpdtcbdfbpemq.supabase.co';
-export const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlobm5pcHlucGR0Y2JkZmJwZW1xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4NDIwNjcsImV4cCI6MjA5NDQxODA2N30.RgSQY_odbIR0vdfGqcdN0aTDyKlBcbrDC35iAKSGRKo';
+// ⚠️ CLICK-TEST ONLY — THIS BRANCH POINTS AT STAGING, NEVER MERGE ⚠️
+// This single commit swaps the production Supabase target for the staging
+// project `mrbeanies-staging` (ref: oyyaivofnjltrnnnszrf) so Netlify builds a
+// deploy preview the owner can click-test the B6b quote flow against. The anon
+// key is public by design — Row-Level Security enforces access. This branch
+// exists solely for the preview; it is thrown away after the click-test.
+export const SUPABASE_URL  = 'https://oyyaivofnjltrnnnszrf.supabase.co';
+export const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95eWFpdm9mbmpsdHJubm5zenJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MDEzNDQsImV4cCI6MjA5ODI3NzM0NH0.kfVLt_k7w3A3DNYqT-fvJcjAX1lAHfx4_3u5LVJZ0x0';
 export const EDGE_URL      = `${SUPABASE_URL}/functions/v1`;
 
 // Brand
