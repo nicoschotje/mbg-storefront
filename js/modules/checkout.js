@@ -247,6 +247,12 @@ function refreshDelivery(host) {
   const btn = host.querySelector('#placeOrderBtn');
   if (btn && !btn.disabled) btn.textContent = `Place Order · ${formatPrice(total)}`;
 
+  // Keep the payment "Send exactly" box in sync with the recomputed total.
+  // Without this the pay box keeps the first-paint estimate while the summary
+  // and button update, so bank-transfer customers see two different amounts.
+  const payBox = host.querySelector('#payInfoBox');
+  if (payBox) renderPayInfo(payBox, _selectedPay, total);
+
   const noteEl = host.querySelector('#deliveryNote');
   if (noteEl) {
     const isEstimate = !getSelectedCoords() && delivery.fee > 0;
