@@ -22,6 +22,7 @@ const cart = await import('../js/modules/cart.js');
 const saved = await import('../js/modules/saved-address.js');
 const myOrders = await import('../js/modules/my-orders-store.js');
 const delivery = await import('../js/modules/delivery.js');
+const usdt = await import('../js/modules/crypto-pricing.js');
 
 // ── CHANGE 1: quantity cap = min(100, stock) ─────────────────────────────────
 console.log('CHANGE 1 — quantity cap (min(100, stock)):');
@@ -166,5 +167,67 @@ cart.addToCart({ id: 'rp2', name: 'Variant Prod', stock_qty: 99 }, 999, rv, true
 assert.equal(cart.getCartProduct('rp2_v1').qty, 5);
 ok('silent add still clamps to variant stock (5)');
 cart.clearCart();
+
+// ── CHANGE 6: USDT checkout pricing (mirror of the place-order edge fn) ───────
+console.log('CHANGE 6 — USDT pricing (crypto-pricing.js):');
+
+// Round UP to 2 dp — the store is never short-paid.
+assert.equal(usdt.ceilTo2(54.9967), 55.00);
+ok('ceilTo2(54.9967) → 55.00 (rounds up)');
+assert.equal(usdt.ceilTo2(55.001), 55.01);
+ok('ceilTo2(55.001) → 55.01 (rounds up)');
+assert.equal(usdt.ceilTo2(1.0), 1.00);
+ok('ceilTo2(1.0) → 1.00 (exact boundary not bumped)');
+
+// Basic calc from the brief: ₱3,379 @ ₱61.44 ≈ 55.00 USDT.
+const base = usdt.computeUsdtDue({ phpTotal: 3379, marketRate: 61.44 });
+assert.equal(base.ok, true);
+assert.equal(base.checkoutRate, 61.44);
+assert.equal(base.usdtDue, 55.00);
+assert.equal(base.cryptoFeePhp, 0);
+assert.equal(base.cryptoPhpDue, 3379);
+ok('₱3,379 @ ₱61.44 → 55.00 USDT, fee 0');
+
+// Owner adjustment −₱1.50 → checkout ₱59.94 → USDT rises above 55.00.
+const adj = usdt.computeUsdtDue({ phpTotal: 3379, marketRate: 61.44, ownerAdjustment: -1.50 });
+assert.equal(adj.checkoutRate, 59.94);
+assert.equal(adj.usdtDue, 56.38); // ceil(3379/59.94 = 56.372…)
+assert.ok(adj.usdtDue > base.usdtDue);
+ok('adjustment −₱1.50 → checkout ₱59.94, USDT rises to 56.38');
+
+// Positive adjustment lowers the USDT amount.
+const adjUp = usdt.computeUsdtDue({ phpTotal: 3379, marketRate: 61.44, ownerAdjustment: 2 });
+assert.equal(adjUp.checkoutRate, 63.44);
+assert.ok(adjUp.usdtDue < base.usdtDue);
+ok('adjustment +₱2 → checkout ₱63.44, USDT drops');
+
+// Flat ₱ fee is added to crypto_php_due (NOT the PHP total) before conversion.
+const flat = usdt.computeUsdtDue({ phpTotal: 3379, marketRate: 61.44, fee: { enabled: true, type: 'flat', value: 50 } });
+assert.equal(flat.cryptoFeePhp, 50);
+assert.equal(flat.cryptoPhpDue, 3429);
+assert.equal(flat.usdtDue, 55.82); // ceil(3429/61.44 = 55.809…)
+ok('flat ₱50 fee → crypto_php_due 3429 → 55.82 USDT');
+
+// Percent fee.
+const pct = usdt.computeUsdtDue({ phpTotal: 3379, marketRate: 61.44, fee: { enabled: true, type: 'percent', value: 3 } });
+assert.equal(pct.cryptoFeePhp, 101.37); // 3% of 3379
+assert.equal(pct.cryptoPhpDue, 3480.37);
+ok('3% fee → ₱101.37 fee, crypto_php_due 3480.37');
+
+// Disabled fee → 0.
+assert.equal(usdt.cryptoFeePhp({ enabled: false, type: 'flat', value: 50 }, 3379), 0);
+assert.equal(usdt.cryptoFeePhp(null, 3379), 0);
+ok('disabled/absent fee → 0');
+
+// Failure: an adjustment that drives checkout_rate ≤ 0 cannot be priced.
+const bad = usdt.computeUsdtDue({ phpTotal: 3379, marketRate: 61.44, ownerAdjustment: -61.44 });
+assert.equal(bad.ok, false);
+assert.equal(bad.reason, 'invalid_rate');
+ok('checkout_rate ≤ 0 → { ok:false, reason:"invalid_rate" }');
+
+// Failure: no/invalid market rate cannot be priced.
+assert.equal(usdt.computeUsdtDue({ phpTotal: 3379, marketRate: null }).ok, false);
+assert.equal(usdt.computeUsdtDue({ phpTotal: 3379, marketRate: 0 }).ok, false);
+ok('missing / zero market rate → { ok:false }');
 
 console.log(`\nAll ${pass} assertions passed.`);

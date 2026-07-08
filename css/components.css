@@ -1635,6 +1635,36 @@ body.modal-open .appFooter {
   margin: 0 0 0.5rem;
 }
 
+/* ── USDT "Send exactly … USDT" amount block (reuses .pay-amount box) ─────── */
+.usdt-amount { margin-bottom: 0.5rem; }
+.usdt-amount-val { font-size: 1.15rem; }
+.usdt-amount-sub {
+  flex-basis: 100%;
+  font-size: 0.75rem;
+  opacity: 0.85;
+}
+.usdt-amount-warn {
+  flex-basis: 100%;
+  margin: 0 0 0.1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #FFE08A;
+}
+.usdt-amount-unavailable {
+  flex-basis: 100%;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+/* Error/unavailable state: drop the confident green money styling. */
+.usdt-amount.usdt-amount-err {
+  background: #FFF7E6;
+  color: #8a6d00;
+  border: 1px solid #E0A800;
+}
+.usdt-rate-asof { font-weight: 400; opacity: 0.75; font-size: 0.78rem; }
+
 /* ── ACCOUNT SHEET (bottom-nav Account tab) ─────────────────────────────
    A slide-up sheet reusing the .modal-backdrop / .modal-sheet animation. */
 .acct-sheet { padding: 0.3rem 1.2rem calc(1.4rem + var(--safe-bottom)); }
