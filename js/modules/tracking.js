@@ -14,7 +14,7 @@
  */
 import { sb } from '../core/supabase.js';
 import { esc, formatPrice, openOverlay, closeOverlay, parseItems, timeAgo, showToast } from '../core/utils.js';
-import { getSession } from '../core/auth.js?v=20260520-polish';
+import { getSession, tryRestoreSession } from '../core/auth.js?v=20260520-polish';
 import { getMyOrderIds } from './my-orders-store.js?v=20260626-phase1';
 import { getProducts } from './products.js?v=20260608-deepfix';
 import { addToCart, clearCart } from './cart.js?v=20260608-deepfix';
@@ -33,10 +33,28 @@ const POLL_MS = 15000;
 let _pollTimer = null;
 let _pollCtx = null;   // { list } while the tracking screen is open
 
+// True only when we hold a login-session token whose expiry is known and still
+// comfortably in the future. Any uncertainty (no token, or an absent / past /
+// unparseable expiry) returns false so the caller refreshes the session — we'd
+// rather re-mint a fresh token than read orders with a dead one.
+function sessionClearlyLive() {
+  const s = getSession();
+  if (!s?.token) return false;
+  const exp = s.expires_at ? Date.parse(s.expires_at) : NaN;
+  return Number.isFinite(exp) && exp > Date.now() + 60000; // 60s safety margin
+}
+
 // The single read path. Returns the orders the current visitor is allowed to
 // see: their account's orders (when logged in) plus any orders placed on this
 // device. Never sends a phone number.
 async function fetchMyOrders() {
+  // Login sessions are short-lived. Before every read, silently refresh the
+  // session from the 90-day "remember me" token whenever the current one is
+  // stale or gone — otherwise get_my_orders() receives a dead token and returns
+  // nothing, making a signed-in customer's orders vanish ("No orders yet").
+  // tryRestoreSession() is a no-op when the session is already live, and a cheap
+  // no-op for guests with no remember token (never prompts for a PIN).
+  if (!sessionClearlyLive()) await tryRestoreSession();
   const token = getSession()?.token || null;
   const ids = getMyOrderIds();
   if (!token && ids.length === 0) return [];
