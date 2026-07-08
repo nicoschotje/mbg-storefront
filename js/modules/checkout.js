@@ -724,7 +724,7 @@ async function fetchUSDTPHPRate(box) {
   let phpRate = null;
   try {
     const res = await fetch(
-      'https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=php',
+      'https://ihnnipynpdtcbdfbpemq.supabase.co/functions/v1/crypto-rate',
       { cache: 'no-store' }
     );
     const data = await res.json();
