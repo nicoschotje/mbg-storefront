@@ -1,18 +1,20 @@
 /* MBG Storefront v2 — Config
- * All hardcoded constants live here.
- */
+* All hardcoded constants live here.
+*/
 
-// Storefront and dashboard both target the single production Supabase
-// project `mrbeanies-prod` (ref: ihnnipynpdtcbdfbpemq). The anon key is
-// public by design — Row-Level Security in Supabase enforces access.
-export const SUPABASE_URL  = 'https://ihnnipynpdtcbdfbpemq.supabase.co';
-export const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlobm5pcHlucGR0Y2JkZmJwZW1xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4NDIwNjcsImV4cCI6MjA5NDQxODA2N30.RgSQY_odbIR0vdfGqcdN0aTDyKlBcbrDC35iAKSGRKo';
-export const EDGE_URL      = `${SUPABASE_URL}/functions/v1`;
+// [DO NOT MERGE — STAGING DEMO CONFIG]
+// This demo branch points the storefront preview at the STAGING Supabase
+// project mrbeanies-staging (ref: oyyaivofnjltrnnnszrf) so the client
+// can click-test safely. The feature branch (PR #40) keeps the production
+// config. The anon key is public by design — RLS enforces access.
+export const SUPABASE_URL = 'https://oyyaivofnjltrnnnszrf.supabase.co';
+export const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95eWFpdm9mbmpsdHJubm5zenJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MDEzNDQsImV4cCI6MjA5ODI3NzM0NH0.kfVLt_k7w3A3DNYqT-fvJcjAX1lAHfx4_3u5LVJZ0x0';
+export const EDGE_URL = `${SUPABASE_URL}/functions/v1`;
 
 // Brand
-export const BRAND_NAME       = "Mr. Beanie's Greenies";
-export const BRAND_SHORT      = 'MBG';
-export const SUPPORT_TG_BOT   = 'MyWebShopStore_bot';
+export const BRAND_NAME = "Mr. Beanie's Greenies";
+export const BRAND_SHORT = 'MBG';
+export const SUPPORT_TG_BOT = 'MyWebShopStore_bot';
 
 // Delivery pricing model
 // Flat-rate zones have been replaced by a distance-based calculator
@@ -29,10 +31,10 @@ export const DEFAULT_FREE_DELIVERY_THRESHOLD = 5000;
 
 // Payment methods (mirror old storefront)
 export const PAYMENT_METHODS = [
-  { id: 'gcash',         label: 'GCash',         icon: 'G',  needsReceipt: true  },
-  { id: 'maya',          label: 'Maya',          icon: 'M',  needsReceipt: true  },
-  { id: 'bank_transfer', label: 'Bank Transfer', icon: 'B',  needsReceipt: true  },
-  { id: 'usdt',          label: 'USDT (Crypto)',   icon: 'U', needsReceipt: true  }
+{ id: 'gcash', label: 'GCash', icon: 'G', needsReceipt: true },
+{ id: 'maya', label: 'Maya', icon: 'M', needsReceipt: true },
+{ id: 'bank_transfer', label: 'Bank Transfer', icon: 'B', needsReceipt: true },
+{ id: 'usdt', label: 'USDT (Crypto)', icon: 'U', needsReceipt: true }
 ];
 
 // Auth tuning
@@ -47,13 +49,12 @@ export const SW_PATH = './service-worker.js';
 // Fallback hero / category banner images (Unsplash; used only if banners table empty)
 export const FALLBACK_HERO = 'https://images.unsplash.com/photo-1536819114556-1c10c64c5066?w=1200&q=80';
 export const FALLBACK_CATEGORY_BANNERS = {
-  'Flower':         'https://images.unsplash.com/photo-1603909223429-69bb7101f420?w=1200&q=80',
-  'Carts & Vapes':  'https://images.unsplash.com/photo-1590736969955-71cc94901144?w=1200&q=80',
-  'Vapes':          'https://images.unsplash.com/photo-1590736969955-71cc94901144?w=1200&q=80',
-  'Carts':          'https://images.unsplash.com/photo-1590736969955-71cc94901144?w=1200&q=80',
-  'Dabs':           'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=1200&q=80',
-  'Concentrates':   'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=1200&q=80',
-  'Edibles':        'https://images.unsplash.com/photo-1517816743773-6e0fd518b4a6?w=1200&q=80',
-  'Snacks':         'https://images.unsplash.com/photo-1582719188393-bb71ca45dbb9?w=1200&q=80'
+'Flower': 'https://images.unsplash.com/photo-1603909223429-69bb7101f420?w=1200&q=80',
+'Carts & Vapes': 'https://images.unsplash.com/photo-1590736969955-71cc94901144?w=1200&q=80',
+'Vapes': 'https://images.unsplash.com/photo-1590736969955-71cc94901144?w=1200&q=80',
+'Carts': 'https://images.unsplash.com/photo-1590736969955-71cc94901144?w=1200&q=80',
+'Dabs': 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=1200&q=80',
+'Concentrates': 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=1200&q=80',
+'Edibles': 'https://images.unsplash.com/photo-1517816743773-6e0fd518b4a6?w=1200&q=80',
+'Snacks': 'https://images.unsplash.com/photo-1582719188393-bb71ca45dbb9?w=1200&q=80'
 };
-
