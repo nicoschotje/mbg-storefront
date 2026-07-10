@@ -58,3 +58,5 @@ export const FALLBACK_CATEGORY_BANNERS = {
 'Edibles': 'https://images.unsplash.com/photo-1517816743773-6e0fd518b4a6?w=1200&q=80',
 'Snacks': 'https://images.unsplash.com/photo-1582719188393-bb71ca45dbb9?w=1200&q=80'
 };
+
+// build-trigger: netlify preview for PR #41 (base changed to main after creation)
