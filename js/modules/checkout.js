@@ -644,7 +644,7 @@ function renderPayInfo(box, method, totalPHP) {
     return;
   }
   if (method === 'usdt') {
-    renderUSDTPayment(box);
+    renderUSDTPayment(box, totalPHP);
     return;
   }
   box.innerHTML = '';
@@ -672,7 +672,7 @@ function usdtNetworkInfo(raw) {
 }
 
 // ── USDT payment rendering ──────────────────────────────────
-function renderUSDTPayment(box) {
+function renderUSDTPayment(box, totalPHP) {
   if (!box) return;
   const ss = getStoreSettings();
   // Show ONLY the network the owner configured (crypto_usdt_network). The old
@@ -686,6 +686,11 @@ function renderUSDTPayment(box) {
   box.innerHTML = `<div class="pay-info usdt-block">
     <h4>USDT Payment</h4>
     <div class="usdt-rate" id="usdtRate">Fetching live rate…</div>
+    <div class="pay-amount usdt-send-wrap" id="usdtSendWrap" hidden>
+      <span class="pay-amount-label">Send exactly</span>
+      <b class="pay-amount-val" id="usdtSendVal">—</b>
+      <button type="button" class="copy-btn" data-copy="" id="usdtSendCopy">Copy amount</button>
+    </div>
     <div class="usdt-network-label">Network</div>
     <div class="usdt-network-grid">
       <div class="usdt-network-option selected" aria-readonly="true">
@@ -716,11 +721,13 @@ function renderUSDTPayment(box) {
     } catch(_) { showToast('Copy failed — select the address manually'); }
   });
 
-  // Live PHP rate from CoinGecko
-  fetchUSDTPHPRate(box);
+  attachCopyButtons(box);
+
+  // Live PHP rate via the crypto-rate edge function
+  fetchUSDTPHPRate(box, totalPHP);
 }
 
-async function fetchUSDTPHPRate(box) {
+async function fetchUSDTPHPRate(box, totalPHP) {
   let phpRate = null;
   try {
     const res = await fetch(
@@ -735,6 +742,25 @@ async function fetchUSDTPHPRate(box) {
   rateEl.textContent = phpRate
     ? `1 USDT ≈ ₱${phpRate.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     : 'Live rate unavailable';
+
+  // The number the customer actually needs: total ÷ rate, rounded UP to
+  // 2 decimals so the store never receives less than the peso total.
+  // Re-renders arrive with fresh totals via renderPayInfo, so this stays
+  // in sync with delivery/promo changes by construction.
+  const wrap = box.querySelector('#usdtSendWrap');
+  if (wrap) {
+    const total = Number(totalPHP) || 0;
+    if (phpRate && total > 0) {
+      const usdt = Math.ceil((total / phpRate) * 100) / 100;
+      const valEl = wrap.querySelector('#usdtSendVal');
+      if (valEl) valEl.textContent = usdt.toFixed(2) + ' USDT';
+      const copyBtn = wrap.querySelector('#usdtSendCopy');
+      if (copyBtn) copyBtn.setAttribute('data-copy', usdt.toFixed(2));
+      wrap.hidden = false;
+    } else {
+      wrap.hidden = true;
+    }
+  }
 }
 
 async function placeOrder(host) {
