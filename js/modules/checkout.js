@@ -11,6 +11,7 @@ import { getSelectedCoords, setSelectedCoords } from './address.js?v=20260608-de
 import { initAddressMap } from './leaflet-map.js?v=20260608-deepfix';
 import { getSavedAddresses, saveAddress, deleteAddress, addressLabel } from './saved-address.js?v=20260615-savedaddr';
 import { rememberMyOrderId } from './my-orders-store.js?v=20260626-phase1';
+import { computeUsdtDue } from './crypto-pricing.js?v=20260722-stage5';
 
 let _selectedPay = 'gcash';
 let _selectedZoneId = null;   // null = Within Metro Manila (distance-based fee)
@@ -32,6 +33,20 @@ const QUOTE_DEBOUNCE_MS = 400;
 const QUOTE_LOADING_TEXT = 'Calculating delivery…';
 const QUOTE_RETRY_TEXT   = 'Delivery quote unavailable — tap to retry';
 const QUOTE_BLOCKED_TEXT = 'Prices may have changed — please reload the page';
+
+// ── USDT live-rate cache ─────────────────────────────────────────────────────
+// The crypto-rate edge function is the single USDT→PHP source (server-cached,
+// dodges per-browser CoinGecko rate limits). We cache its value module-side so
+// the "Send exactly … USDT" amount recomputes INSTANTLY from the SAME final
+// total the Order Summary uses — on every delivery / zone / method change —
+// without refetching the rate on each render. The amount snapshotted server-side
+// by place-order at placement is the authority; this box is a live preview.
+let _usdtRate = { php: null, ts: 0, stale: false };
+let _usdtRateInflight = null;
+const USDT_RATE_TTL_MS = 45_000;
+let _usdtCurrentTotal = 0;      // latest PHP total the USDT box should price
+let _usdtReceiptStale = false;  // true once the total changed after a receipt was attached
+let _lastRenderedTotal = null;  // previous total refreshDelivery painted (for the stale check)
 
 // Hard ceiling for receipt screenshots — matches the payment-receipts
 // Supabase storage bucket's 5 MB file_size_limit. Checked client-side so
@@ -191,6 +206,7 @@ function renderQuickConfirm(host, session, addr) {
   host.querySelector('.checkout-back')?.addEventListener('click', closeCheckoutScreen);
   host.querySelectorAll('.pay-option').forEach(p => p.addEventListener('click', () => {
     _selectedPay = p.dataset.pay;
+    _usdtReceiptStale = false;   // method switch clears any pending USDT re-check warning
     renderQuickConfirm(host, session, addr);
   }));
   host.querySelector('#placeOrderBtn')?.addEventListener('click', () => placeOrder(host));
@@ -220,6 +236,9 @@ export function closeCheckoutScreen() {
   _quoteInvalidCount = 0;
   _quoteBlocked = false;
   _placing = false;
+  _usdtReceiptStale = false;
+  _lastRenderedTotal = null;
+  _usdtCurrentTotal = 0;
 }
 
 // ── Server-issued delivery quotes (Phase 3 B6b) ──────────────────────────────
@@ -345,11 +364,20 @@ function refreshDelivery(host) {
     btn.textContent = quoted ? `${base} · ${formatPrice(total)}` : base;
   }
 
-  // Keep the payment "Send exactly" box in sync with the recomputed total.
-  // Without this the pay box keeps the first-paint estimate while the summary
-  // and button update, so bank-transfer customers see two different amounts.
+  // USDT only: if the customer already attached a transaction screenshot and
+  // the quoted total (hence the exact USDT amount due) just changed, flag it so
+  // the re-render warns them to re-check and re-upload — never a silent
+  // mismatch between the amount they sent and the amount now owed. The render
+  // itself happens in syncPayInfo below, which preserves the attached file.
   const payBox = host.querySelector('#payInfoBox');
-  if (payBox) renderPayInfo(payBox, _selectedPay, total);
+  if (payBox &&
+      _selectedPay === 'usdt' &&
+      payBox.querySelector('#receiptFile')?.files?.length &&
+      total != null && _lastRenderedTotal != null &&
+      Math.abs(total - _lastRenderedTotal) > 0.001) {
+    _usdtReceiptStale = true;
+  }
+  _lastRenderedTotal = total;
 
   const noteEl = host.querySelector('#deliveryNote');
   if (noteEl) {
@@ -547,6 +575,7 @@ function renderCheckout(host, session) {
   host.querySelector('.checkout-back')?.addEventListener('click', closeCheckoutScreen);
   host.querySelectorAll('.pay-option').forEach(p => p.addEventListener('click', () => {
     _selectedPay = p.dataset.pay;
+    _usdtReceiptStale = false;   // method switch clears any pending USDT re-check warning
     renderCheckout(host, session);
   }));
 
@@ -793,6 +822,43 @@ function usdtNetworkInfo(raw) {
 }
 
 // ── USDT payment rendering ──────────────────────────────────
+// Fetches the USDT→PHP rate from the crypto-rate edge function (never the old
+// browser→CoinGecko path, which got rate-limited). Cached module-side for
+// USDT_RATE_TTL_MS; concurrent callers share one in-flight request so a burst of
+// re-renders can't fan out into a burst of fetches.
+function usdtRateIsFresh() {
+  return _usdtRate.php != null && (Date.now() - _usdtRate.ts) < USDT_RATE_TTL_MS;
+}
+
+async function ensureUsdtRate() {
+  if (usdtRateIsFresh()) return _usdtRate;
+  if (_usdtRateInflight) return _usdtRateInflight;
+  _usdtRateInflight = (async () => {
+    try {
+      const res = await fetch(`${EDGE_URL}/crypto-rate`, { cache: 'no-store' });
+      const data = await res.json();
+      const php = data?.tether?.php;
+      if (typeof php === 'number' && php > 0) {
+        _usdtRate = { php, ts: Date.now(), stale: !!data?.stale };
+      } else {
+        _usdtRate = { php: null, ts: Date.now(), stale: false };
+      }
+    } catch(_) {
+      _usdtRate = { php: null, ts: Date.now(), stale: false };
+    } finally {
+      _usdtRateInflight = null;
+    }
+    return _usdtRate;
+  })();
+  return _usdtRateInflight;
+}
+
+function rateAsOf(ts) {
+  try {
+    return new Date(ts).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
+  } catch(_) { return ''; }
+}
+
 function renderUSDTPayment(box, totalPHP) {
   if (!box) return;
   const ss = getStoreSettings();
@@ -804,14 +870,14 @@ function renderUSDTPayment(box, totalPHP) {
   const netInfo       = usdtNetworkInfo(ss?.crypto_usdt_network);
   const walletAddress = ss?.crypto_usdt_address || ss?.usdt_wallet_address || '';
   const qrUrl         = ss?.crypto_qr_url || ss?.usdt_qr_url || '';
+  _usdtCurrentTotal = Number(totalPHP) || 0;
+
   box.innerHTML = `<div class="pay-info usdt-block">
     <h4>USDT Payment</h4>
-    <div class="usdt-rate" id="usdtRate">Fetching live rate…</div>
-    <div class="pay-amount usdt-send-wrap" id="usdtSendWrap" hidden>
-      <span class="pay-amount-label">Send exactly</span>
-      <b class="pay-amount-val" id="usdtSendVal">—</b>
-      <button type="button" class="copy-btn" data-copy="" id="usdtSendCopy">Copy amount</button>
+    <div class="pay-amount usdt-amount" id="usdtAmountBlock">
+      <span class="pay-amount-label">Calculating amount…</span>
     </div>
+    <div class="usdt-rate" id="usdtRate">Fetching live rate…</div>
     <div class="usdt-network-label">Network</div>
     <div class="usdt-network-grid">
       <div class="usdt-network-option selected" aria-readonly="true">
@@ -842,46 +908,66 @@ function renderUSDTPayment(box, totalPHP) {
     } catch(_) { showToast('Copy failed — select the address manually'); }
   });
 
-  attachCopyButtons(box);
+  // Attaching a (new) screenshot clears the "amount changed" warning — the
+  // customer is confirming against the amount shown right now.
+  box.querySelector('#receiptFile')?.addEventListener('change', () => {
+    _usdtReceiptStale = false;
+    paintUsdtAmount(box);
+  });
 
-  // Live PHP rate via the crypto-rate edge function
-  fetchUSDTPHPRate(box, totalPHP);
+  // Paint the amount from the cached rate immediately (instant on total change),
+  // then ensure a fresh rate and repaint when it lands.
+  paintUsdtAmount(box);
+  ensureUsdtRate().then(() => paintUsdtAmount(box));
 }
 
-async function fetchUSDTPHPRate(box, totalPHP) {
-  let phpRate = null;
-  try {
-    const res = await fetch(
-      'https://ihnnipynpdtcbdfbpemq.supabase.co/functions/v1/crypto-rate',
-      { cache: 'no-store' }
-    );
-    const data = await res.json();
-    phpRate = data?.tether?.php ?? null;
-  } catch(_) { /* rate unavailable — handled below */ }
-  const rateEl = box.querySelector('#usdtRate');
-  if (!rateEl) return;
-  rateEl.textContent = phpRate
-    ? `1 USDT ≈ ₱${phpRate.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    : 'Live rate unavailable';
+// Fills the "Send exactly … USDT" amount + checkout-rate lines from the cached
+// rate and the LATEST total (_usdtCurrentTotal) — so a late rate response always
+// prices the current total, never a stale one. Only touches those two nodes, so
+// it's cheap to call on every total change and on rate arrival. No-op if the box
+// was re-rendered or the customer switched to another payment method.
+function paintUsdtAmount(box) {
+  if (!box) return;
+  const amountEl = box.querySelector('#usdtAmountBlock');
+  const rateEl   = box.querySelector('#usdtRate');
+  if (!amountEl || !rateEl) return;
 
-  // The number the customer actually needs: total ÷ rate, rounded UP to
-  // 2 decimals so the store never receives less than the peso total.
-  // Re-renders arrive with fresh totals via renderPayInfo, so this stays
-  // in sync with delivery/promo changes by construction.
-  const wrap = box.querySelector('#usdtSendWrap');
-  if (wrap) {
-    const total = Number(totalPHP) || 0;
-    if (phpRate && total > 0) {
-      const usdt = Math.ceil((total / phpRate) * 100) / 100;
-      const valEl = wrap.querySelector('#usdtSendVal');
-      if (valEl) valEl.textContent = usdt.toFixed(2) + ' USDT';
-      const copyBtn = wrap.querySelector('#usdtSendCopy');
-      if (copyBtn) copyBtn.setAttribute('data-copy', usdt.toFixed(2));
-      wrap.hidden = false;
+  const warn = _usdtReceiptStale
+    ? `<p class="usdt-amount-warn">&#9888; Your order total changed after you attached a screenshot — please re-check the exact amount below and upload a new one.</p>`
+    : '';
+  const unavailable = () => {
+    amountEl.classList.add('usdt-amount-err');
+    amountEl.innerHTML = `${warn}<span class="usdt-amount-unavailable">Unable to calculate the USDT amount right now. Please try again shortly or choose another payment method.</span>`;
+    rateEl.textContent = 'Live rate unavailable';
+  };
+
+  // Rate still loading and none cached yet → keep the placeholder.
+  if (_usdtRate.php == null) {
+    if (_usdtRateInflight) {
+      amountEl.classList.remove('usdt-amount-err');
+      amountEl.innerHTML = `${warn}<span class="pay-amount-label">Calculating amount…</span>`;
     } else {
-      wrap.hidden = true;
+      unavailable();
     }
+    return;
   }
+
+  const q = computeUsdtDue({ phpTotal: _usdtCurrentTotal, marketRate: _usdtRate.php });
+  if (!q.ok) { unavailable(); return; }
+
+  amountEl.classList.remove('usdt-amount-err');
+  const usdtStr = q.usdtDue.toFixed(2);
+  amountEl.innerHTML = `${warn}
+    <span class="pay-amount-label">Send exactly</span>
+    <b class="pay-amount-val usdt-amount-val">${esc(usdtStr)} USDT</b>
+    <button type="button" class="copy-btn" data-copy="${esc(usdtStr)}">Copy amount</button>
+    <span class="usdt-amount-sub">for your ${esc(formatPrice(_usdtCurrentTotal))} order</span>`;
+  attachCopyButtons(amountEl);
+
+  const asof = rateAsOf(_usdtRate.ts);
+  rateEl.innerHTML = `Checkout rate <b>1 USDT = ${esc(formatPrice(q.checkoutRate))}</b>`
+    + `${asof ? ` <span class="usdt-rate-asof">· as of ${esc(asof)}</span>` : ''}`
+    + `${_usdtRate.stale ? ` <span class="usdt-rate-asof">(last known)</span>` : ''}`;
 }
 
 async function placeOrder(host) {

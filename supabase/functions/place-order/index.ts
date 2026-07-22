@@ -30,6 +30,27 @@ const cors = {
 }
 
 const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100
+// Round UP to 2 decimals so the store is never short-paid on a USDT order.
+// Mirrors js/modules/crypto-pricing.js ceilTo2 (keep the two in sync).
+const ceil2 = (n: number) => Math.ceil((Number(n) * 100) - 1e-6) / 100
+
+// USDT→PHP rate from the crypto-rate edge function — the same server-cached
+// source the storefront preview reads (verify_jwt=false, so no auth header).
+// Returns null when unavailable so a USDT order that can't be priced is
+// REJECTED rather than snapshotted with a bogus rate.
+async function fetchUsdtPhpRate(): Promise<number | null> {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/crypto-rate`, {
+      headers: { accept: 'application/json' },
+    })
+    if (!res.ok) return null
+    const d = await res.json()
+    const php = d?.tether?.php
+    return typeof php === 'number' && php > 0 ? php : null
+  } catch (_) {
+    return null
+  }
+}
 
 // ── Authoritative subtotal from items × current DB prices ────────────────────
 // Effective unit price mirrors the storefront's priceForItem():
@@ -200,7 +221,7 @@ serve(async (req) => {
     const { subtotal: serverSubtotal, pricedItems } = await serverCalcSubtotal(SB, items)
 
     const { data: ss } = await SB.from('store_settings')
-      .select('store_lat, store_lng, delivery_rate_multiplier, delivery_fee, free_delivery_min, free_delivery_enabled, telegram_bot_token, telegram_chat_id')
+      .select('store_lat, store_lng, delivery_rate_multiplier, delivery_fee, free_delivery_min, free_delivery_enabled, telegram_bot_token, telegram_chat_id, crypto_enabled, crypto_usdt_address, crypto_usdt_network')
       .limit(1).single()
 
     const serverFee = await serverCalcDeliveryFee(SB, ss, {
@@ -212,6 +233,55 @@ serve(async (req) => {
 
     const serverDiscount = await serverCalcDiscount(SB, promo_code, pricedItems, serverSubtotal)
     const finalTotal = Math.max(0, round2(serverSubtotal + serverFee - serverDiscount.amount))
+
+    // ── USDT: price the order server-side and build the authoritative snapshot.
+    //    Done BEFORE the order row is created so a USDT order we cannot price is
+    //    rejected cleanly (no orphan / no bogus snapshot). The crypto fee (PR 2)
+    //    is a surcharge on the USDT amount only — it is deliberately NOT added to
+    //    orders.total, so the ledger shape (total = subtotal + delivery − discount)
+    //    is untouched.
+    let cryptoSnapshot: Record<string, unknown> | null = null
+    if ((payment_method || '') === 'usdt') {
+      if (!ss?.crypto_enabled || !ss?.crypto_usdt_address) {
+        return new Response(JSON.stringify({ error: 'USDT payments are not available right now. Please choose another payment method.' }), {
+          status: 400, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
+      const marketRate = await fetchUsdtPhpRate()
+      // PR 1: checkout_rate = market_rate (PR 2 adds the signed owner adjustment).
+      const checkoutRate = marketRate
+      if (checkoutRate == null || !(checkoutRate > 0)) {
+        return new Response(JSON.stringify({ error: 'Unable to calculate the USDT amount right now. Please try again in a moment or choose another payment method.' }), {
+          status: 503, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
+      const cryptoFeePhp = 0                                   // PR 2 wires the configurable fee
+      const cryptoPhpDue = round2(finalTotal + cryptoFeePhp)
+      const usdtDue = ceil2(cryptoPhpDue / checkoutRate)
+      if (!(usdtDue > 0)) {
+        return new Response(JSON.stringify({ error: 'Unable to calculate the USDT amount right now. Please try again in a moment or choose another payment method.' }), {
+          status: 503, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
+      cryptoSnapshot = {
+        v: 1,
+        payment_method: 'usdt',
+        network: ss?.crypto_usdt_network || null,
+        subtotal: serverSubtotal,
+        delivery_fee: serverFee,
+        discount: serverDiscount.amount,
+        final_php_total: finalTotal,
+        market_rate: marketRate,
+        owner_adjustment: 0,                                   // PR 2
+        checkout_rate: checkoutRate,
+        crypto_fee_php: cryptoFeePhp,                          // PR 2
+        crypto_php_due: cryptoPhpDue,
+        usdt_due: usdtDue,
+        rounding: 'ceil_2dp',
+        rate_source: 'crypto-rate',
+        rate_timestamp: new Date().toISOString(),
+      }
+    }
 
     const payload = {
       customer_name,
@@ -250,6 +320,17 @@ serve(async (req) => {
 
     const orderId = rpcResult?.order_id
     const orderNumber = rpcResult?.order_number
+
+    // Stamp the USDT snapshot onto the freshly created order. place_customer_order
+    // owns the insert (stock lock/decrement) and carries no crypto fields, so the
+    // snapshot is written with a follow-up service-role update. orders.total and
+    // every ledger-shaped column are left exactly as the RPC set them. Later
+    // store_settings changes never recompute this — the snapshot is frozen here.
+    if (cryptoSnapshot && orderId) {
+      const { error: snapErr } = await SB.from('orders')
+        .update({ crypto_snapshot: cryptoSnapshot }).eq('id', orderId)
+      if (snapErr) console.error('place-order: crypto_snapshot update failed (non-fatal):', snapErr.message)
+    }
 
     if (serverDiscount.ruleId) {
       SB.rpc('increment_discount_uses', { p_rule_id: serverDiscount.ruleId }).then().catch(console.error)
