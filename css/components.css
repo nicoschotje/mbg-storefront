@@ -1635,6 +1635,36 @@ body.modal-open .appFooter {
   margin: 0 0 0.5rem;
 }
 
+/* ── USDT "Send exactly … USDT" amount block (reuses .pay-amount box) ─────── */
+.usdt-amount { margin-bottom: 0.5rem; }
+.usdt-amount-val { font-size: 1.15rem; }
+.usdt-amount-sub {
+  flex-basis: 100%;
+  font-size: 0.75rem;
+  opacity: 0.85;
+}
+.usdt-amount-warn {
+  flex-basis: 100%;
+  margin: 0 0 0.1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #FFE08A;
+}
+.usdt-amount-unavailable {
+  flex-basis: 100%;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+/* Error/unavailable state: drop the confident green money styling. */
+.usdt-amount.usdt-amount-err {
+  background: #FFF7E6;
+  color: #8a6d00;
+  border: 1px solid #E0A800;
+}
+.usdt-rate-asof { font-weight: 400; opacity: 0.75; font-size: 0.78rem; }
+
 /* ── ACCOUNT SHEET (bottom-nav Account tab) ─────────────────────────────
    A slide-up sheet reusing the .modal-backdrop / .modal-sheet animation. */
 .acct-sheet { padding: 0.3rem 1.2rem calc(1.4rem + var(--safe-bottom)); }
@@ -2068,3 +2098,163 @@ body.modal-open .appFooter {
   color: var(--green-dark);
 }
 .saved-addr-save-btn:active { transform: translateY(1px); }
+
+/* ── AGENT WALLET (Phase 2 C2b) ─────────────────────────────────────────
+   Full-screen overlay opened from the account sheet — same slide-up
+   pattern as .tracking-screen. Only rendered for confirmed agents. */
+.wallet-screen {
+  position: fixed; inset: 0;
+  background: var(--bg);
+  z-index: 95;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  transform: translateY(100%);
+  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  padding-bottom: env(safe-area-inset-bottom);
+  /* display:none while closed — keeps the off-screen wallet out of the
+     tab order and accessibility tree, same as .tracking-screen. */
+  display: none;
+}
+.wallet-screen.open { transform: translateY(0); display: block; }
+.wallet-inner {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+.wal-body { padding: 1rem 0 calc(2rem + var(--safe-bottom)); }
+.wal-loading, .wal-empty {
+  padding: 1.2rem 0.2rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+.wal-empty { text-align: left; padding: 0.4rem 0.2rem 0.8rem; }
+
+/* Balance cards */
+.wal-balances { display: flex; flex-direction: column; gap: 0.6rem; }
+.wal-card {
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 0.9rem 1rem;
+  box-shadow: var(--shadow-sm);
+  flex: 1;
+}
+.wal-card-main {
+  background: var(--green-dark);
+  border-color: var(--green-dark);
+  color: var(--cream);
+}
+.wal-row { display: flex; gap: 0.6rem; }
+.wal-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 0.3rem;
+}
+.wal-card-main .wal-label { color: var(--amber-pale); }
+.wal-amount {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 2rem;
+  line-height: 1.1;
+  color: var(--gold);
+}
+.wal-amount-sm {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: var(--green-dark);
+}
+.wal-hint { font-size: 0.72rem; color: var(--text-light); margin-top: 0.2rem; }
+
+/* Withdraw */
+.wal-withdraw-wrap { margin: 1rem 0 0.4rem; }
+.wal-withdraw { width: 100%; }
+.wal-withdraw:disabled { opacity: 0.5; }
+.wal-fee-note, .wal-reason {
+  font-size: 0.8rem;
+  text-align: center;
+  margin-top: 0.45rem;
+  color: var(--text-muted);
+}
+.wal-reason { color: var(--warning); font-weight: 600; }
+
+/* Section heading + lists */
+.wal-h {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  margin: 1.4rem 0 0.5rem;
+  color: var(--green-dark);
+}
+.wal-list { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
+.wal-item {
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 0.85rem;
+}
+.wal-item-top {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 0.5rem;
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+.wal-item-amt { font-weight: 700; color: var(--green-dark); white-space: nowrap; }
+.wal-item-sub {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem;
+  margin-top: 0.3rem;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+/* Status chips — ledger entries (pending/available/released) and
+   withdrawal requests (requested/approved/rejected). */
+.wal-chip {
+  display: inline-block;
+  padding: 0.12rem 0.55rem;
+  border-radius: 50px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--border-light);
+  color: var(--text-muted);
+}
+.wal-chip-pending, .wal-chip-requested {
+  background: #FFF7E6; color: #6B5300; border: 1px solid #E0A800;
+}
+.wal-chip-available, .wal-chip-approved { background: var(--success); color: var(--white); }
+.wal-chip-released { background: var(--green-muted); color: var(--white); }
+.wal-chip-rejected { background: var(--danger); color: var(--white); }
+
+/* Withdrawal confirm sheet */
+.wal-confirm { padding: 0.5rem 1.4rem calc(1.4rem + var(--safe-bottom)); }
+.wal-confirm h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+}
+.wal-confirm p {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+}
+.wal-confirm p b { color: var(--green-dark); }
+.wal-confirm .btn-primary { width: 100%; }
+.wal-cancel {
+  width: 100%;
+  margin-top: 0.6rem;
+  border: none;
+  background: transparent;
+  padding: 0.7rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}

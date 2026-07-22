@@ -3,10 +3,37 @@
  */
 
 // Storefront and dashboard both target the single production Supabase
-// project `mrbeanies-prod` (ref: ihnnipynpdtcbdfbpemq). The anon key is
+// project `mrbeanies-prod` (ref: ihnnipynpdtcbdfbpemq). The anon keys are
 // public by design — Row-Level Security in Supabase enforces access.
-export const SUPABASE_URL  = 'https://ihnnipynpdtcbdfbpemq.supabase.co';
-export const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlobm5pcHlucGR0Y2JkZmJwZW1xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4NDIwNjcsImV4cCI6MjA5NDQxODA2N30.RgSQY_odbIR0vdfGqcdN0aTDyKlBcbrDC35iAKSGRKo';
+//
+// Env switch (same pattern as the dashboard): ?env=staging in the URL points
+// the app at `mrbeanies-staging` (ref: oyyaivofnjltrnnnszrf) for preview
+// testing. Default — no param, any other value, or no `location` (Node
+// tests) — is prod, untouched behavior.
+const ENVS = {
+  prod: {
+    url:  'https://ihnnipynpdtcbdfbpemq.supabase.co',
+    anon: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlobm5pcHlucGR0Y2JkZmJwZW1xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4NDIwNjcsImV4cCI6MjA5NDQxODA2N30.RgSQY_odbIR0vdfGqcdN0aTDyKlBcbrDC35iAKSGRKo'
+  },
+  staging: {
+    url:  'https://oyyaivofnjltrnnnszrf.supabase.co',
+    anon: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95eWFpdm9mbmpsdHJubm5zenJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MDEzNDQsImV4cCI6MjA5ODI3NzM0NH0.kfVLt_k7w3A3DNYqT-fvJcjAX1lAHfx4_3u5LVJZ0x0'
+  }
+};
+
+function detectEnv() {
+  try {
+    if (typeof location !== 'undefined' &&
+        new URLSearchParams(location.search).get('env') === 'staging') {
+      return 'staging';
+    }
+  } catch (_) { /* fall through to prod */ }
+  return 'prod';
+}
+
+export const ENV           = detectEnv();
+export const SUPABASE_URL  = ENVS[ENV].url;
+export const SUPABASE_ANON = ENVS[ENV].anon;
 export const EDGE_URL      = `${SUPABASE_URL}/functions/v1`;
 
 // Brand

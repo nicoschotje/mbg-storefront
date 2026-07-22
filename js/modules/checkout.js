@@ -9,13 +9,44 @@ import { getCartItems, getSubtotal, getDiscount, clearCart, getAppliedPromo, pri
 import { getSession, getAuthPhone } from '../core/auth.js?v=20260520-polish';
 import { getSelectedCoords, setSelectedCoords } from './address.js?v=20260608-deepfix';
 import { initAddressMap } from './leaflet-map.js?v=20260608-deepfix';
-import { calculateDelivery } from './delivery.js?v=20260518-mobile';
 import { getSavedAddresses, saveAddress, deleteAddress, addressLabel } from './saved-address.js?v=20260615-savedaddr';
 import { rememberMyOrderId } from './my-orders-store.js?v=20260626-phase1';
+import { computeUsdtDue } from './crypto-pricing.js?v=20260722-stage5';
 
 let _selectedPay = 'gcash';
 let _selectedZoneId = null;   // null = Within Metro Manila (distance-based fee)
 let _deliveryZones = [];      // active delivery_zones rows, loaded once
+
+// Server-issued delivery quote (Phase 3 B6b). The browser computes NO delivery
+// fee: quote_delivery issues {quote_id, fee, label, expires_at}, the UI renders
+// exactly that, and the order carries quote_id so place-order charges exactly
+// the quoted fee. No quote → Place Order stays disabled (fail-closed).
+let _quote = null;            // { quote_id, fee, label, expires_at } or null
+let _quoteErr = false;        // last quote attempt failed → tap-to-retry line
+let _quoteSeq = 0;            // stale guard: only the latest request may write _quote
+let _quoteTimer = null;       // debounce handle for quote triggers
+let _quoteInvalidCount = 0;   // consecutive place-order 409 quote_invalid rejections
+let _quoteBlocked = false;    // 2-strike terminal state: stop auto-requoting, ask to reload
+let _placing = false;         // a submit is in flight — placeOrder owns the button, refreshDelivery must not touch it
+
+const QUOTE_DEBOUNCE_MS = 400;
+const QUOTE_LOADING_TEXT = 'Calculating delivery…';
+const QUOTE_RETRY_TEXT   = 'Delivery quote unavailable — tap to retry';
+const QUOTE_BLOCKED_TEXT = 'Prices may have changed — please reload the page';
+
+// ── USDT live-rate cache ─────────────────────────────────────────────────────
+// The crypto-rate edge function is the single USDT→PHP source (server-cached,
+// dodges per-browser CoinGecko rate limits). We cache its value module-side so
+// the "Send exactly … USDT" amount recomputes INSTANTLY from the SAME final
+// total the Order Summary uses — on every delivery / zone / method change —
+// without refetching the rate on each render. The amount snapshotted server-side
+// by place-order at placement is the authority; this box is a live preview.
+let _usdtRate = { php: null, ts: 0, stale: false };
+let _usdtRateInflight = null;
+const USDT_RATE_TTL_MS = 45_000;
+let _usdtCurrentTotal = 0;      // latest PHP total the USDT box should price
+let _usdtReceiptStale = false;  // true once the total changed after a receipt was attached
+let _lastRenderedTotal = null;  // previous total refreshDelivery painted (for the stale check)
 
 // Hard ceiling for receipt screenshots — matches the payment-receipts
 // Supabase storage bucket's 5 MB file_size_limit. Checked client-side so
@@ -94,10 +125,16 @@ export async function openCheckoutScreen() {
   }
   await loadDeliveryZones();
   _selectedPay = preferredPayMethod(session);
+  _quoteInvalidCount = 0;
+  _quoteBlocked = false;
+  _placing = false;
   // Frictionless path: returning customer with a saved address → one-line confirm.
   const quickAddr = quickConfirmAddress(session);
   if (quickAddr) renderQuickConfirm(host, session, quickAddr);
   else renderCheckout(host, session);
+  // Checkout-open quote — fired AFTER render, so renderQuickConfirm has
+  // already synced its saved-address pin into the shared accessors.
+  scheduleQuote(host);
   host.classList.add('open');
   document.body.classList.add('lock-scroll');
   openOverlay('checkoutScreen', () => closeCheckoutScreen());
@@ -108,10 +145,9 @@ export async function openCheckoutScreen() {
 // address + session). "Edit details" expands to the full editable form.
 function renderQuickConfirm(host, session, addr) {
   const ss = getStoreSettings();
-  const subtotal = getSubtotal();
-  const disc = getDiscount();
 
-  // Restore the saved address's map pin so the delivery fee is accurate.
+  // Restore the saved address's map pin BEFORE the checkout-open quote fires,
+  // so requestQuote reads these coords through getSelectedCoords().
   if (addr.coords && Number.isFinite(addr.coords.lat) && Number.isFinite(addr.coords.lng)) {
     setSelectedCoords(addr.coords);
   } else {
@@ -120,9 +156,6 @@ function renderQuickConfirm(host, session, addr) {
 
   const pays = availablePays(ss);
   if (!pays.some(p => p.id === _selectedPay) && pays.length) _selectedPay = pays[0].id;
-
-  const delivery = computeDelivery(ss, subtotal);
-  const total = Math.max(0, subtotal + delivery.fee - disc.amount);
 
   const name  = session?.display_name || addr.name || '';
   const phone = getAuthPhone() || session?.phone || addr.phone || '';
@@ -141,8 +174,8 @@ function renderQuickConfirm(host, session, addr) {
         <h3>Confirm &amp; pay</h3>
         <div class="qc-line">📍 Deliver to <b>${esc(fullAddr)}</b></div>
         <div class="qc-line">👤 <b>${esc(name)}</b> · ${esc(phone)}</div>
-        <div class="qc-line">🚚 Delivery <b id="coDeliveryFee">${delivery.fee === 0 ? 'FREE' : esc(formatPrice(delivery.fee))}</b></div>
-        <div class="qc-line qc-total"><span>Total</span><b id="coTotal">${esc(formatPrice(total))}</b></div>
+        <div class="qc-line">🚚 Delivery <b id="coDeliveryFee">${QUOTE_LOADING_TEXT}</b></div>
+        <div class="qc-line qc-total"><span>Total</span><b id="coTotal">—</b></div>
 
         <div class="qc-paylabel">Pay by</div>
         <div class="pay-grid">
@@ -167,20 +200,24 @@ function renderQuickConfirm(host, session, addr) {
     </div>
 
     <div class="checkout-cta-bar">
-      <button id="placeOrderBtn" class="place-order-btn" type="button">Confirm order · ${esc(formatPrice(total))}</button>
+      <button id="placeOrderBtn" class="place-order-btn" type="button" data-label-base="Confirm order" disabled>Confirm order</button>
     </div>`;
 
   host.querySelector('.checkout-back')?.addEventListener('click', closeCheckoutScreen);
   host.querySelectorAll('.pay-option').forEach(p => p.addEventListener('click', () => {
     _selectedPay = p.dataset.pay;
+    _usdtReceiptStale = false;   // method switch clears any pending USDT re-check warning
     renderQuickConfirm(host, session, addr);
   }));
-  renderPayInfo(host.querySelector('#payInfoBox'), _selectedPay, total);
   host.querySelector('#placeOrderBtn')?.addEventListener('click', () => placeOrder(host));
+  // Quick-confirm has no #deliveryLabel — its fee line doubles as the
+  // tap-to-retry target when a quote attempt fails.
+  host.querySelector('#coDeliveryFee')?.addEventListener('click', () => retryQuote(host));
   host.querySelector('#confirmEditBtn')?.addEventListener('click', () => {
     renderCheckout(host, session);
     applySavedAddress(host, addr); // keep the address when expanding to full edit
   });
+  refreshDelivery(host);
 }
 
 export function closeCheckoutScreen() {
@@ -190,83 +227,194 @@ export function closeCheckoutScreen() {
   document.body.classList.remove('lock-scroll');
   closeOverlay('checkoutScreen');
   _selectedZoneId = null;
+  // Drop the quote state so a reopened checkout always starts from a fresh
+  // server quote — and a late in-flight response can't write into it.
+  ++_quoteSeq;
+  clearTimeout(_quoteTimer);
+  _quote = null;
+  _quoteErr = false;
+  _quoteInvalidCount = 0;
+  _quoteBlocked = false;
+  _placing = false;
+  _usdtReceiptStale = false;
+  _lastRenderedTotal = null;
+  _usdtCurrentTotal = 0;
 }
 
-// Runs the distance-based calculator with the live store_settings values
-// and whatever customer coordinates the address autocomplete has captured.
-function computeDelivery(ss, subtotal) {
-  // If the customer picked an Outside-Metro-Manila zone, use its flat base_fee.
-  if (_selectedZoneId) {
-    const zone = _deliveryZones.find(z => z.id === _selectedZoneId);
-    if (zone) {
-      const fee = Number(zone.base_fee || 0);
-      const freeMin = Number(ss?.free_delivery_min) || 0;
-      const freeEnabled = ss?.free_delivery_enabled !== false;
-      const finalFee = (freeEnabled && freeMin > 0 && subtotal >= freeMin) ? 0 : fee;
-      return {
-        fee: finalFee,
-        label: finalFee === 0
-          ? `Free delivery to ${zone.name}`
-          : `Delivery to ${zone.name} — ₱${finalFee.toLocaleString('en-PH')}`,
-      };
+// ── Server-issued delivery quotes (Phase 3 B6b) ──────────────────────────────
+// The old client-side fee math (zone base_fee lookup + the delivery.js
+// haversine calculator) is gone from checkout: the quote_delivery RPC is the
+// only fee authority. requestQuote and placeOrder MUST read zone/coords/
+// subtotal through the same accessors (_selectedZoneId, getSelectedCoords(),
+// getSubtotal()) so the quoted mode and the order payload can never disagree.
+
+// Builds the quote_delivery input from the shared accessors. Mode pin: a
+// selected zone sends zone_id ONLY (no coords, even if a pin was dropped
+// earlier); otherwise coords when picked, or neither (server fallback fee).
+function buildQuoteInput() {
+  const p_input = {
+    session_token: getSession()?.token || null,
+    subtotal: Number(getSubtotal().toFixed(2)),
+    zone_id: _selectedZoneId || null,
+  };
+  if (!_selectedZoneId) {
+    const coords = getSelectedCoords();
+    if (coords) {
+      p_input.dest_lat = coords.lat;
+      p_input.dest_lng = coords.lng;
     }
   }
-  // Default: distance-based Metro Manila calculation.
-  const coords = getSelectedCoords();
-  return calculateDelivery({
-    storeLat:        Number(ss?.store_lat),
-    storeLng:        Number(ss?.store_lng),
-    customerLat:     coords ? coords.lat : null,
-    customerLng:     coords ? coords.lng : null,
-    subtotal,
-    surgeMultiplier: ss?.delivery_rate_multiplier,
-    freeDeliveryMin: ss?.free_delivery_min,
-    fallbackFee:     Number(ss?.delivery_fee) || 0
-  });
+  return p_input;
 }
 
-// Recomputes the quote and updates the delivery-related DOM in place.
-// Called after each render and whenever the address coordinates change,
-// so the customer sees the fee react without losing their typed input.
+// Requests a fresh quote immediately. UI triggers should go through
+// scheduleQuote (debounced); direct calls are for the retry tap, the
+// place-order guard, and the 409 quote_invalid refresh.
+async function requestQuote(host) {
+  const seq = ++_quoteSeq;
+  _quote = null;
+  _quoteErr = false;
+  refreshDelivery(host);
+
+  let data = null;
+  let failed = false;
+  try {
+    const res = await sb().rpc('quote_delivery', { p_input: buildQuoteInput() });
+    data = res.data;
+    failed = !!res.error;
+  } catch (_) {
+    failed = true;
+  }
+  if (seq !== _quoteSeq) return; // superseded by a newer request — drop it
+
+  if (failed || !data || data.success !== true) {
+    _quote = null;
+    _quoteErr = true;
+  } else {
+    _quote = {
+      quote_id:   data.quote_id,
+      fee:        Number(data.fee),
+      label:      data.label,
+      expires_at: data.expires_at,
+    };
+    _quoteErr = false;
+  }
+  refreshDelivery(host);
+}
+
+// Debounced quote trigger (checkout open, address change, zone change). Clears
+// the current quote first — fail-closed: Place Order stays disabled until the
+// fresh quote lands.
+function scheduleQuote(host) {
+  ++_quoteSeq; // invalidate any in-flight response right away
+  _quote = null;
+  _quoteErr = false;
+  // A fresh address/zone change is a legitimate new attempt — lift the
+  // 2-strike block so the new inputs get quoted.
+  _quoteBlocked = false;
+  _quoteInvalidCount = 0;
+  refreshDelivery(host);
+  clearTimeout(_quoteTimer);
+  _quoteTimer = setTimeout(() => requestQuote(host), QUOTE_DEBOUNCE_MS);
+}
+
+// Tap handler for the "quote unavailable" line.
+function retryQuote(host) {
+  if (_quote || !_quoteErr) return;
+  requestQuote(host);
+}
+
+// Renders the current quote state into whichever checkout layout is on screen.
+// THE single fee-render step — no client fee math anywhere in this path.
+// While _quote is null: delivery line shows loading/retry text, the total
+// shows "—" (never ₱0, never a stale client fee) and Place Order is disabled
+// with its plain label.
 function refreshDelivery(host) {
-  const ss = getStoreSettings();
   const subtotal = getSubtotal();
   const disc = getDiscount();
-  const delivery = computeDelivery(ss, subtotal);
-  const total = Math.max(0, subtotal + delivery.fee - disc.amount);
+  const quoted = !!_quote;
+  const total = quoted ? Math.max(0, subtotal + _quote.fee - disc.amount) : null;
+  const pendingText = _quoteBlocked ? QUOTE_BLOCKED_TEXT
+    : _quoteErr ? QUOTE_RETRY_TEXT
+    : QUOTE_LOADING_TEXT;
 
   const labelEl = host.querySelector('#deliveryLabel');
-  if (labelEl) labelEl.textContent = delivery.label;
+  if (labelEl) labelEl.textContent = quoted ? _quote.label : pendingText;
 
   const feeEl = host.querySelector('#coDeliveryFee');
-  if (feeEl) feeEl.textContent = delivery.fee === 0 ? 'FREE' : formatPrice(delivery.fee);
+  if (feeEl) {
+    if (quoted) feeEl.textContent = _quote.fee === 0 ? 'FREE' : formatPrice(_quote.fee);
+    // Full form: the loading/retry line lives on #deliveryLabel, so the
+    // summary row just shows a placeholder. Quick-confirm has no
+    // #deliveryLabel — its fee line IS the loading/retry line.
+    else feeEl.textContent = labelEl ? '—' : pendingText;
+  }
 
   const totalEl = host.querySelector('#coTotal');
-  if (totalEl) totalEl.textContent = formatPrice(total);
+  if (totalEl) totalEl.textContent = quoted ? formatPrice(total) : '—';
 
+  // While a submit is in flight, placeOrder owns the button (disabled +
+  // "Placing order…" spinner). refreshDelivery must not touch it — an async
+  // quote landing mid-submit would otherwise re-enable it (double-submit) or
+  // wipe the spinner text.
   const btn = host.querySelector('#placeOrderBtn');
-  if (btn && !btn.disabled) btn.textContent = `Place Order · ${formatPrice(total)}`;
+  if (btn && !_placing) {
+    const base = btn.dataset.labelBase || 'Place Order';
+    btn.disabled = !quoted;
+    btn.textContent = quoted ? `${base} · ${formatPrice(total)}` : base;
+  }
 
-  // Keep the payment "Send exactly" box in sync with the recomputed total.
-  // Without this the pay box keeps the first-paint estimate while the summary
-  // and button update, so bank-transfer customers see two different amounts.
+  // USDT only: if the customer already attached a transaction screenshot and
+  // the quoted total (hence the exact USDT amount due) just changed, flag it so
+  // the re-render warns them to re-check and re-upload — never a silent
+  // mismatch between the amount they sent and the amount now owed. The render
+  // itself happens in syncPayInfo below, which preserves the attached file.
   const payBox = host.querySelector('#payInfoBox');
-  if (payBox) renderPayInfo(payBox, _selectedPay, total);
+  if (payBox &&
+      _selectedPay === 'usdt' &&
+      payBox.querySelector('#receiptFile')?.files?.length &&
+      total != null && _lastRenderedTotal != null &&
+      Math.abs(total - _lastRenderedTotal) > 0.001) {
+    _usdtReceiptStale = true;
+  }
+  _lastRenderedTotal = total;
 
   const noteEl = host.querySelector('#deliveryNote');
   if (noteEl) {
-    const isEstimate = !getSelectedCoords() && delivery.fee > 0;
+    // Server quoted the flat fallback fee (no zone, no pin) — nudge for a pin.
+    const isEstimate = quoted && _quote.fee > 0 && !_selectedZoneId && !getSelectedCoords();
     noteEl.textContent = isEstimate
       ? '⚠️ Enter your full address above for an accurate delivery fee.'
       : '';
     noteEl.hidden = !isEstimate;
   }
+
+  syncPayInfo(host, total);
 }
 
-// The address autocomplete fires this when coordinates are picked or cleared.
+// Re-renders the payment info box when the rendered total changes, so the
+// "Send exactly" amount always matches the quoted total (and shows "—" while
+// no quote is held). A chosen receipt file is carried into the fresh DOM —
+// a re-quote must never wipe the customer's uploaded screenshot.
+function syncPayInfo(host, total) {
+  const box = host.querySelector('#payInfoBox');
+  if (!box) return;
+  const key = total == null ? 'pending' : String(total);
+  if (box.dataset.renderedTotal === key) return;
+  const oldFile = box.querySelector('#receiptFile');
+  renderPayInfo(box, _selectedPay, total);
+  const newFile = box.querySelector('#receiptFile');
+  if (oldFile && newFile && oldFile.files && oldFile.files.length) {
+    newFile.replaceWith(oldFile);
+  }
+  box.dataset.renderedTotal = key;
+}
+
+// The address autocomplete / map pin fires this when coordinates are picked,
+// moved, or cleared — each change invalidates the quote and requests a new one.
 document.addEventListener('mbg:deliveryAddrChanged', () => {
   const host = document.getElementById('checkoutScreen');
-  if (host && host.classList.contains('open')) refreshDelivery(host);
+  if (host && host.classList.contains('open')) scheduleQuote(host);
 });
 
 function renderCheckout(host, session) {
@@ -297,9 +445,6 @@ function renderCheckout(host, session) {
   const valPostal   = prev.postal   !== undefined ? prev.postal   : '';
   const valNotes    = prev.notes    !== undefined ? prev.notes    : '';
   const valPromo    = prev.promo    !== undefined ? prev.promo    : (getAppliedPromo() || '');
-
-  const delivery = computeDelivery(ss, subtotal);
-  const total = Math.max(0, subtotal + delivery.fee - disc.amount);
 
   // Filter pay methods by the dashboard's store_settings toggles.
   const pays = availablePays(ss);
@@ -385,7 +530,7 @@ function renderCheckout(host, session) {
             ${_deliveryZones.map(z => `<option value="${esc(z.id)}" ${_selectedZoneId === z.id ? 'selected' : ''}>Outside Metro Manila — ${esc(z.name)} (₱${Number(z.base_fee || 0).toLocaleString('en-PH')})</option>`).join('')}
           </select>
         </label>` : ''}
-        <div class="delivery-quote"><b id="deliveryLabel">${esc(delivery.label)}</b></div>
+        <div class="delivery-quote"><b id="deliveryLabel">${QUOTE_LOADING_TEXT}</b></div>
         <p class="delivery-note" id="deliveryNote" hidden></p>
       </section>
 
@@ -416,25 +561,26 @@ function renderCheckout(host, session) {
         </div>
         <div class="summary-totals">
           <div class="row"><span>Subtotal</span><b>${esc(formatPrice(subtotal))}</b></div>
-          <div class="row"><span>Delivery</span><b id="coDeliveryFee">${delivery.fee === 0 ? 'FREE' : esc(formatPrice(delivery.fee))}</b></div>
+          <div class="row"><span>Delivery</span><b id="coDeliveryFee">—</b></div>
           ${disc.amount > 0 ? `<div class="row"><span>Discount</span><b>− ${esc(formatPrice(disc.amount))}</b></div>` : ''}
-          <div class="row total"><span>Total</span><b id="coTotal">${esc(formatPrice(total))}</b></div>
+          <div class="row total"><span>Total</span><b id="coTotal">—</b></div>
         </div>
       </section>
     </div>
 
     <div class="checkout-cta-bar">
-      <button id="placeOrderBtn" class="place-order-btn" type="button">Place Order · ${esc(formatPrice(total))}</button>
+      <button id="placeOrderBtn" class="place-order-btn" type="button" data-label-base="Place Order" disabled>Place Order</button>
     </div>`;
 
   host.querySelector('.checkout-back')?.addEventListener('click', closeCheckoutScreen);
   host.querySelectorAll('.pay-option').forEach(p => p.addEventListener('click', () => {
     _selectedPay = p.dataset.pay;
+    _usdtReceiptStale = false;   // method switch clears any pending USDT re-check warning
     renderCheckout(host, session);
   }));
-  renderPayInfo(host.querySelector('#payInfoBox'), _selectedPay, total);
 
   host.querySelector('#placeOrderBtn')?.addEventListener('click', () => placeOrder(host));
+  host.querySelector('#deliveryLabel')?.addEventListener('click', () => retryQuote(host));
 
   // The name/phone fields render readonly when pre-filled; the inline "Edit"
   // link unlocks the field so the customer can override the value.
@@ -453,7 +599,7 @@ function renderCheckout(host, session) {
   if (zoneSelect) {
     zoneSelect.addEventListener('change', () => {
       _selectedZoneId = zoneSelect.value || null;
-      refreshDelivery(host);
+      scheduleQuote(host);
     });
   }
 
@@ -586,15 +732,19 @@ function renderPayInfo(box, method, totalPHP) {
   if (!box) return;
   ensureQrLightbox();
   const ss = getStoreSettings();
-  const amountStr = (Number(totalPHP) || 0).toFixed(2);
+  // totalPHP == null → the server quote hasn't landed yet, so the total is
+  // unknown: show "—" (never ₱0) and no copy button until the quote resolves.
+  const hasTotal  = totalPHP != null;
+  const amountStr  = hasTotal ? (Number(totalPHP) || 0).toFixed(2) : '';
+  const amountDisp = hasTotal ? formatPrice(totalPHP) : '—';
   // Prominent "send exactly ₱X" block with a copy button — the exact amount is
   // the strongest auto-verification signal (OCR matches on it), so we make it
   // one-tap to copy. The static payee QR stays for scan-to-pay.
   const amountBlock = `
     <div class="pay-amount">
       <span class="pay-amount-label">Send exactly</span>
-      <b class="pay-amount-val">${esc(formatPrice(totalPHP))}</b>
-      <button type="button" class="copy-btn" data-copy="${esc(amountStr)}">Copy amount</button>
+      <b class="pay-amount-val">${esc(amountDisp)}</b>
+      ${hasTotal ? `<button type="button" class="copy-btn" data-copy="${esc(amountStr)}">Copy amount</button>` : ''}
     </div>`;
   const payRow = (label, value, copy) => `
     <div class="pay-row">
@@ -615,7 +765,7 @@ function renderPayInfo(box, method, totalPHP) {
       ${payRow(`${label} number`, num || 'See QR', !!num)}
       ${qrUrl ? `<div class="pay-qr-wrap"><img class="pay-qr" src="${esc(qrUrl)}" alt="${label} QR code"/>
         <div class="pay-qr-cap">Scan to pay, then enter the exact amount above</div></div>` : ''}
-      <p class="pay-confirm">⚠️ Confirm you're paying <b>${esc(name)}</b> exactly <b>${esc(formatPrice(totalPHP))}</b>.</p>
+      <p class="pay-confirm">⚠️ Confirm you're paying <b>${esc(name)}</b> exactly <b>${esc(amountDisp)}</b>.</p>
       <p class="pay-note">After paying, upload your receipt screenshot below.</p>
       <input type="file" id="receiptFile" accept="image/png,image/jpeg,image/jpg,image/webp"/>
     </div>`;
@@ -635,7 +785,7 @@ function renderPayInfo(box, method, totalPHP) {
       ${payRow('Account number', acctNum)}
       ${ss?.bank_qr_url ? `<div class="pay-qr-wrap"><img class="pay-qr" src="${esc(ss.bank_qr_url)}" alt="Bank QR"/>
         <div class="pay-qr-cap">Scan to pay, then enter the exact amount above</div></div>` : ''}
-      <p class="pay-confirm">⚠️ Confirm you're transferring <b>${esc(formatPrice(totalPHP))}</b> to <b>${esc(acctName)}</b>.</p>
+      <p class="pay-confirm">⚠️ Confirm you're transferring <b>${esc(amountDisp)}</b> to <b>${esc(acctName)}</b>.</p>
       <p class="pay-note">After transferring, upload your receipt below.</p>
       <input type="file" id="receiptFile" accept="image/png,image/jpeg,image/jpg,image/webp"/>
     </div>`;
@@ -672,6 +822,43 @@ function usdtNetworkInfo(raw) {
 }
 
 // ── USDT payment rendering ──────────────────────────────────
+// Fetches the USDT→PHP rate from the crypto-rate edge function (never the old
+// browser→CoinGecko path, which got rate-limited). Cached module-side for
+// USDT_RATE_TTL_MS; concurrent callers share one in-flight request so a burst of
+// re-renders can't fan out into a burst of fetches.
+function usdtRateIsFresh() {
+  return _usdtRate.php != null && (Date.now() - _usdtRate.ts) < USDT_RATE_TTL_MS;
+}
+
+async function ensureUsdtRate() {
+  if (usdtRateIsFresh()) return _usdtRate;
+  if (_usdtRateInflight) return _usdtRateInflight;
+  _usdtRateInflight = (async () => {
+    try {
+      const res = await fetch(`${EDGE_URL}/crypto-rate`, { cache: 'no-store' });
+      const data = await res.json();
+      const php = data?.tether?.php;
+      if (typeof php === 'number' && php > 0) {
+        _usdtRate = { php, ts: Date.now(), stale: !!data?.stale };
+      } else {
+        _usdtRate = { php: null, ts: Date.now(), stale: false };
+      }
+    } catch(_) {
+      _usdtRate = { php: null, ts: Date.now(), stale: false };
+    } finally {
+      _usdtRateInflight = null;
+    }
+    return _usdtRate;
+  })();
+  return _usdtRateInflight;
+}
+
+function rateAsOf(ts) {
+  try {
+    return new Date(ts).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
+  } catch(_) { return ''; }
+}
+
 function renderUSDTPayment(box, totalPHP) {
   if (!box) return;
   const ss = getStoreSettings();
@@ -683,14 +870,14 @@ function renderUSDTPayment(box, totalPHP) {
   const netInfo       = usdtNetworkInfo(ss?.crypto_usdt_network);
   const walletAddress = ss?.crypto_usdt_address || ss?.usdt_wallet_address || '';
   const qrUrl         = ss?.crypto_qr_url || ss?.usdt_qr_url || '';
+  _usdtCurrentTotal = Number(totalPHP) || 0;
+
   box.innerHTML = `<div class="pay-info usdt-block">
     <h4>USDT Payment</h4>
-    <div class="usdt-rate" id="usdtRate">Fetching live rate…</div>
-    <div class="pay-amount usdt-send-wrap" id="usdtSendWrap" hidden>
-      <span class="pay-amount-label">Send exactly</span>
-      <b class="pay-amount-val" id="usdtSendVal">—</b>
-      <button type="button" class="copy-btn" data-copy="" id="usdtSendCopy">Copy amount</button>
+    <div class="pay-amount usdt-amount" id="usdtAmountBlock">
+      <span class="pay-amount-label">Calculating amount…</span>
     </div>
+    <div class="usdt-rate" id="usdtRate">Fetching live rate…</div>
     <div class="usdt-network-label">Network</div>
     <div class="usdt-network-grid">
       <div class="usdt-network-option selected" aria-readonly="true">
@@ -721,46 +908,66 @@ function renderUSDTPayment(box, totalPHP) {
     } catch(_) { showToast('Copy failed — select the address manually'); }
   });
 
-  attachCopyButtons(box);
+  // Attaching a (new) screenshot clears the "amount changed" warning — the
+  // customer is confirming against the amount shown right now.
+  box.querySelector('#receiptFile')?.addEventListener('change', () => {
+    _usdtReceiptStale = false;
+    paintUsdtAmount(box);
+  });
 
-  // Live PHP rate via the crypto-rate edge function
-  fetchUSDTPHPRate(box, totalPHP);
+  // Paint the amount from the cached rate immediately (instant on total change),
+  // then ensure a fresh rate and repaint when it lands.
+  paintUsdtAmount(box);
+  ensureUsdtRate().then(() => paintUsdtAmount(box));
 }
 
-async function fetchUSDTPHPRate(box, totalPHP) {
-  let phpRate = null;
-  try {
-    const res = await fetch(
-      'https://ihnnipynpdtcbdfbpemq.supabase.co/functions/v1/crypto-rate',
-      { cache: 'no-store' }
-    );
-    const data = await res.json();
-    phpRate = data?.tether?.php ?? null;
-  } catch(_) { /* rate unavailable — handled below */ }
-  const rateEl = box.querySelector('#usdtRate');
-  if (!rateEl) return;
-  rateEl.textContent = phpRate
-    ? `1 USDT ≈ ₱${phpRate.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    : 'Live rate unavailable';
+// Fills the "Send exactly … USDT" amount + checkout-rate lines from the cached
+// rate and the LATEST total (_usdtCurrentTotal) — so a late rate response always
+// prices the current total, never a stale one. Only touches those two nodes, so
+// it's cheap to call on every total change and on rate arrival. No-op if the box
+// was re-rendered or the customer switched to another payment method.
+function paintUsdtAmount(box) {
+  if (!box) return;
+  const amountEl = box.querySelector('#usdtAmountBlock');
+  const rateEl   = box.querySelector('#usdtRate');
+  if (!amountEl || !rateEl) return;
 
-  // The number the customer actually needs: total ÷ rate, rounded UP to
-  // 2 decimals so the store never receives less than the peso total.
-  // Re-renders arrive with fresh totals via renderPayInfo, so this stays
-  // in sync with delivery/promo changes by construction.
-  const wrap = box.querySelector('#usdtSendWrap');
-  if (wrap) {
-    const total = Number(totalPHP) || 0;
-    if (phpRate && total > 0) {
-      const usdt = Math.ceil((total / phpRate) * 100) / 100;
-      const valEl = wrap.querySelector('#usdtSendVal');
-      if (valEl) valEl.textContent = usdt.toFixed(2) + ' USDT';
-      const copyBtn = wrap.querySelector('#usdtSendCopy');
-      if (copyBtn) copyBtn.setAttribute('data-copy', usdt.toFixed(2));
-      wrap.hidden = false;
+  const warn = _usdtReceiptStale
+    ? `<p class="usdt-amount-warn">&#9888; Your order total changed after you attached a screenshot — please re-check the exact amount below and upload a new one.</p>`
+    : '';
+  const unavailable = () => {
+    amountEl.classList.add('usdt-amount-err');
+    amountEl.innerHTML = `${warn}<span class="usdt-amount-unavailable">Unable to calculate the USDT amount right now. Please try again shortly or choose another payment method.</span>`;
+    rateEl.textContent = 'Live rate unavailable';
+  };
+
+  // Rate still loading and none cached yet → keep the placeholder.
+  if (_usdtRate.php == null) {
+    if (_usdtRateInflight) {
+      amountEl.classList.remove('usdt-amount-err');
+      amountEl.innerHTML = `${warn}<span class="pay-amount-label">Calculating amount…</span>`;
     } else {
-      wrap.hidden = true;
+      unavailable();
     }
+    return;
   }
+
+  const q = computeUsdtDue({ phpTotal: _usdtCurrentTotal, marketRate: _usdtRate.php });
+  if (!q.ok) { unavailable(); return; }
+
+  amountEl.classList.remove('usdt-amount-err');
+  const usdtStr = q.usdtDue.toFixed(2);
+  amountEl.innerHTML = `${warn}
+    <span class="pay-amount-label">Send exactly</span>
+    <b class="pay-amount-val usdt-amount-val">${esc(usdtStr)} USDT</b>
+    <button type="button" class="copy-btn" data-copy="${esc(usdtStr)}">Copy amount</button>
+    <span class="usdt-amount-sub">for your ${esc(formatPrice(_usdtCurrentTotal))} order</span>`;
+  attachCopyButtons(amountEl);
+
+  const asof = rateAsOf(_usdtRate.ts);
+  rateEl.innerHTML = `Checkout rate <b>1 USDT = ${esc(formatPrice(q.checkoutRate))}</b>`
+    + `${asof ? ` <span class="usdt-rate-asof">· as of ${esc(asof)}</span>` : ''}`
+    + `${_usdtRate.stale ? ` <span class="usdt-rate-asof">(last known)</span>` : ''}`;
 }
 
 async function placeOrder(host) {
@@ -788,11 +995,27 @@ async function placeOrder(host) {
   const items = getCartItems();
   if (!items.length) { showToast('Your bag is empty'); return; }
 
+  // Hard quote gate: every order must carry a server-issued quote_id. Still
+  // loading, or the last attempt failed → no order (fail-closed).
+  if (!_quote) {
+    showToast('Getting your delivery quote — one moment');
+    requestQuote(host);
+    return;
+  }
+
+  // Freeze the quote and its bound location mode for the whole async submit.
+  // A map-pin drag or zone change mid-submit clears/replaces _quote (via
+  // scheduleQuote); reading it again after the upload/place-order awaits would
+  // crash or send a quote_id that no longer matches the fee. The non-null
+  // _quote here was issued for exactly the current zone/coords (any change
+  // nulls it), so this snapshot is internally consistent.
+  const quote  = _quote;
+  const zoneId = _selectedZoneId;
+  const coords = zoneId ? null : getSelectedCoords();
+
   const subtotal = getSubtotal();
   const disc     = getDiscount();
-  const ss = getStoreSettings();
-  const delivery = computeDelivery(ss, subtotal);
-  const finalFee = delivery.fee;
+  const finalFee = quote.fee;
   const total  = Math.max(0, subtotal + finalFee - disc.amount);
 
   const needsReceipt = ['gcash','maya','bank_transfer','usdt'].includes(_selectedPay);
@@ -808,8 +1031,8 @@ async function placeOrder(host) {
   }
 
   const btn = host.querySelector('#placeOrderBtn');
+  _placing = true;   // placeOrder now owns the button; refreshDelivery won't touch it
   btn.disabled = true;
-  btn.dataset.label = btn.textContent;
   btn.innerHTML = '<span class="spinner"></span> Placing order…';
 
   try {
@@ -829,10 +1052,12 @@ async function placeOrder(host) {
       customer_name:    name,
       customer_phone:   phone,
       delivery_address: addr,
-      delivery_zone:    _selectedZoneId
-                          ? (_deliveryZones.find(z => z.id === _selectedZoneId)?.name || 'Outside Metro Manila')
-                          : (getSelectedCoords() ? 'Metro Manila' : 'Metro Manila (estimated)'),
-      delivery_zone_id: _selectedZoneId || null,
+      delivery_zone:    zoneId
+                          ? (_deliveryZones.find(z => z.id === zoneId)?.name || 'Outside Metro Manila')
+                          : (coords ? 'Metro Manila' : 'Metro Manila (estimated)'),
+      // The server charges exactly the stored quote; delivery_fee rides along
+      // for display/back-compat only (place-order ignores it on the quote path).
+      quote_id:         quote.quote_id,
       delivery_fee:     finalFee,
       subtotal:         Number(subtotal.toFixed(2)),
       total:            Number(total.toFixed(2)),
@@ -866,10 +1091,15 @@ async function placeOrder(host) {
       })
     };
 
-    // Attach delivery coordinates only if the customer picked a Nominatim
-    // suggestion — a manually typed address still places the order fine.
-    const coords = getSelectedCoords();
-    if (coords) {
+    // Mode mirror (B6a per-mode quote binding): the payload carries exactly
+    // the location signal the quote was issued for. Zone mode → zone_id only
+    // (no coords, even if a pin was dropped earlier); pin mode → coords only;
+    // fallback → neither. zoneId/coords are the frozen snapshot from submit
+    // start, so the payload mode matches the quote even if the customer
+    // interacts mid-submit.
+    if (zoneId) {
+      payload.delivery_zone_id = zoneId;
+    } else if (coords) {
       payload.delivery_lat = coords.lat;
       payload.delivery_lng = coords.lng;
     }
@@ -888,6 +1118,30 @@ async function placeOrder(host) {
     try { data = await resp.json(); } catch(_) {
       throw new Error(`Server error (${resp.status}). Please try again.`);
     }
+
+    // The server rejected our quote (missing / expired / consumed / mode
+    // mismatch). Refresh the quote once and ask the customer to confirm
+    // again — NEVER auto-resubmit. A second consecutive rejection won't be
+    // fixed by another quote (usually stale cart prices) → stop requoting.
+    if (resp.status === 409 && data.error === 'quote_invalid') {
+      _quoteInvalidCount += 1;
+      _quote = null;
+      _quoteErr = false;
+      if (_quoteInvalidCount >= 2) {
+        // A 2nd consecutive rejection won't self-heal via re-quote (usually
+        // stale cart prices) — enter the terminal blocked state so the UI
+        // stops the requote loop and honestly asks for a reload.
+        _quoteBlocked = true;
+        showToast('Prices may have changed — please reload the page and try again');
+      } else {
+        showToast('Your delivery fee was refreshed — please confirm your order again');
+        requestQuote(host);
+      }
+      return;
+    }
+    // Any non-quote_invalid response ends a quote_invalid streak — the "2
+    // consecutive" cap must not count rejections separated by other failures.
+    _quoteInvalidCount = 0;
     if (!resp.ok || data.error) throw new Error(data.error || `Order failed (${resp.status})`);
 
     logActivity('order_placed', {
@@ -921,10 +1175,16 @@ async function placeOrder(host) {
     }
   } catch(e) {
     console.error('[checkout] placeOrder error', e);
+    // A network failure (fetch threw before any response) also breaks a
+    // quote_invalid streak — it's a different failure mode.
+    _quoteInvalidCount = 0;
     showToast(e.message || 'Order failed.');
   } finally {
-    btn.disabled = false;
-    btn.textContent = btn.dataset.label || 'Place Order';
+    // Release the button back to refreshDelivery, then re-sync: on success the
+    // screen has closed; on a 409 refresh / blocked / error the button
+    // re-disables until the fresh quote lands (or stays disabled if blocked).
+    _placing = false;
+    refreshDelivery(host);
   }
 }
 
