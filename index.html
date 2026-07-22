@@ -22,7 +22,7 @@
 
   <link rel="stylesheet" href="./css/tokens.css?v=20260520-iphone-fix" />
   <link rel="stylesheet" href="./css/layout.css?v=20260605-uifix" />
-  <link rel="stylesheet" href="./css/components.css?v=20260626-m3" />
+  <link rel="stylesheet" href="./css/components.css?v=20260702-c2b" />
 
   <!-- Leaflet (checkout address map) — loaded from CDN, no build step. -->
   <link rel="stylesheet"
@@ -195,17 +195,23 @@
     import { loadStoreSettings, loadBanners, loadAnnouncements, renderHero, renderAnnouncements } from './js/modules/banners.js?v=20260608-deepfix';
     import { loadCategories, loadProducts, renderCategoryNav, renderSubcategoryNav, renderProductSections, renderFeaturedSection, setSearchQuery, getCategories, getProducts } from './js/modules/products.js?v=20260608-deepfix';
     import { loadDiscountRules, bindCartTriggers, getCartCount, onCartChange } from './js/modules/cart.js?v=20260608-deepfix';
-    import { initBottomNav } from './js/modules/bottomnav.js?v=20260519-orders-tab';
+    import { initBottomNav } from './js/modules/bottomnav.js?v=20260702-c2b';
     import './js/modules/delivery.js?v=20260518-mobile';
     import { openCheckoutScreen } from './js/modules/checkout.js?v=20260721-usdtamt';
     import './js/modules/address.js?v=20260608-deepfix';
     import { openTrackingScreen } from './js/modules/tracking.js?v=20260708-session-restore';
     import { loadTier, renderTierBadge } from './js/modules/tiers.js?v=20260518-mobile';
-    import { renderUserMenu } from './js/modules/usermenu.js?v=20260518-mobile';
+    import { renderUserMenu } from './js/modules/usermenu.js?v=20260702-c2b2';
+    import { initWallet } from './js/modules/wallet.js?v=20260702-c2b2';
     import { SW_PATH } from './js/core/config.js?v=20260518-mobile';
 
     // ── Boot sequence ─────────────────────────
     installPopstateHandler();
+
+    // Agent wallet (Phase 2 C2b): feature-detects on login via get_my_wallet
+    // and stays completely invisible for non-agents and on databases without
+    // the wallet functions (prod until go-live).
+    initWallet();
 
     // Pin the sticky category nav to the bottom of the variable-height, notch-aware
     // header. A hardcoded 70px offset overlapped the header on notched iPhones;

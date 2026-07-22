@@ -65,6 +65,13 @@ export function renderUserMenu(targetEl, { onOrders } = {}) {
     const willOpen = dropdown.hidden;
     dropdown.hidden = !willOpen;
     btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    if (willOpen) {
+      // Let optional account-area modules (e.g. the agent wallet) add their
+      // own entries — same contract as the bottom-nav sheet's mbg:accountSheet.
+      document.dispatchEvent(new CustomEvent('mbg:userMenu', {
+        detail: { menu: dropdown, close: closeDropdown }
+      }));
+    }
   });
 
   targetEl.querySelector('#userMenuOrders').addEventListener('click', () => {

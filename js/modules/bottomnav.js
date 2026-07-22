@@ -64,6 +64,12 @@ function openAccountSheet() {
     closeAccountSheet();
     _cb.onSignOut?.();
   });
+
+  // Let optional account-area modules (e.g. the agent wallet) add their own
+  // entries without this module knowing about them.
+  document.dispatchEvent(new CustomEvent('mbg:accountSheet', {
+    detail: { sheet: host, close: closeAccountSheet }
+  }));
 }
 
 function closeAccountSheet() {
