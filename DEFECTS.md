@@ -189,7 +189,16 @@ Review and drop after confirming they are not needed for planned queries.
 Standing security note; token currently read from `store_settings`/env in
 `place-order` + `notify-customer`. Rotate and update the secret.
 
-### 🔴 D-12 — `update-order` edge function admin key
-`update-order` falls back to a hardcoded `'mrg-admin-2026'` key path; ensure the
-`UPDATE_ORDER_ADMIN_KEY` secret is set and the `is_admin()` gate is the only path.
-(Tracked in the dashboard repo migration notes; mirror here for visibility.)
+### 🟡 D-12 — `update-order` edge function admin key
+The hardcoded `'mrg-admin-2026'` fallback is **gone** from the deployed `update-order`
+(v4) — confirmed 2026-07-23 when the function was backed up to git
+(`supabase/functions/update-order/index.ts`). Auth is now (a) `x-admin-key` matching the
+`UPDATE_ORDER_ADMIN_KEY` secret (requires length ≥ 16), or (b) `is_admin()` via
+`x-admin-secret`/`x-admin-token`. Remaining action for the owner: confirm the
+`UPDATE_ORDER_ADMIN_KEY` secret is set to a long random value (Path B via `is_admin()`
+works regardless), then this closes.
+
+### ℹ️ D-21 — Edge function source backed up to git (2026-07-23)
+11 of 14 deployed edge functions previously existed only in Supabase. All 14 now have
+verbatim source under `supabase/functions/` (copy-only; not redeployed; secret-scanned).
+See `supabase/functions/README.md`.
