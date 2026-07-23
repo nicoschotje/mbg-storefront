@@ -62,13 +62,15 @@ RPCs — anon-only (PUBLIC/authenticated revoked), `search_path` locked, self-ga
 on the session token / order-id capability, returns customer-safe columns only.
 Not a regression; reviewed and accepted.
 
-### 🔴 D-14 — `orders_anon_cancel_own` still uses the recipient-phone header
-Phase 1 removed the phone-based **read** leak (`orders_anon_select_own`). The
-**cancel** policy `orders_anon_cancel_own` still authorizes an UPDATE (cancel a
-pending/confirmed order) when `customer_phone = x-customer-phone` header. It is an
-UPDATE path (not a read), but a recipient phone can still cancel. Follow-up: gate
-cancel on `order_owner_id = <session>` (logged-in) or an order-id capability, and
-drop the phone header. Left as-is to keep the existing cancel feature working.
+### ✅ D-14 — `orders_anon_cancel_own` removed (2026-07-23)
+Applied in `db/2026-07-23-security-pass-d14-d05-d08.sql`. Dropped the phone-header
+cancel policy. Confirmed the only cancel path in real use is `cancel_order()`
+(SECURITY DEFINER, hard-gated on `is_admin()`) plus `orders_admin_header_all` /
+`orders_sales_update`; the storefront has no customer self-cancel UI, so nothing
+live depended on the phone policy. After the change the only remaining `orders`
+UPDATE policies are `is_admin()`, sales-scope and service_role — a recipient phone
+can no longer cancel. If a customer self-cancel is ever built, it must be a
+session-token-validating RPC (like `get_my_orders`), never a header policy.
 
 ### 🟡 D-15 — Backfill of `order_owner_id` runs at live merge, not yet applied
 The conservative backfill (unique normalized-phone match only) is in the migration.
@@ -136,21 +138,38 @@ uses the `authenticated` role, so EXECUTE could safely be revoked from
 
 ## P1 — Other open security-advisor findings (unchanged by Phase 0)
 
-### 🔴 D-05 — `active_sessions` INSERT policy is always-true
-Policy `active_sessions_insert_any` has `WITH CHECK (true)` — bypasses RLS for
-INSERT. Scope it (e.g. to service_role / a session check). (advisor: `rls_policy_always_true`)
+### ✅ D-05 — `active_sessions` always-true INSERT removed (2026-07-23)
+Applied in `db/2026-07-23-security-pass-d14-d05-d08.sql`. Dropped
+`active_sessions_insert_any`. No legitimate anon writer; service_role + is_admin
+policies remain. Anon INSERT now BLOCKED (verified 42501). Advisor 4 → 2 for
+`rls_policy_always_true` (see D-06).
 
-### 🔴 D-06 — 3 further always-true RLS policies
-Three more `rls_policy_always_true` findings beyond `active_sessions`. Enumerate
-and scope each (UPDATE/DELETE/INSERT with `USING/WITH CHECK (true)`).
+### 🟡 D-06 — always-true INSERT: 2 fixed, 2 kept by design (2026-07-23)
+The four `rls_policy_always_true` INSERT findings split by whether a live client
+legitimately writes the table:
+  * **Fixed** — `active_sessions` (D-05) and `auth_audit_log` (`audit_anon_insert`
+    dropped). Neither has a direct anon writer; auth RPCs write auth_audit_log as
+    SECURITY DEFINER. Both now BLOCKED for anon (verified 42501).
+  * **Kept open on purpose** — `activity_log."Allow insert for all"` (client
+    best-effort telemetry via `logActivity`) and `restock_notifications.customers_can_subscribe`
+    (the "notify me when restocked" form). Both are written by the live storefront as
+    anon and are internal append targets (no read leak). Locking them risks a silent
+    regression (e.g. the dashboard activity feed) for no data-exposure gain, so they
+    stay. This is the residual `rls_policy_always_true` count of 2.
 
-### 🔴 D-07 — `customer_remember_tokens` has RLS enabled but NO policy
-Functionally service-role-only today, but add an explicit deny/scoped policy +
-comment so intent is recorded. (advisor: `rls_enabled_no_policy`)
+### ✅ D-07 — no-policy tables given explicit service-role policy (2026-07-23)
+Applied in `db/2026-07-23-security-pass-d14-d05-d08.sql`. Both `rls_enabled_no_policy`
+tables (`customer_remember_tokens` **and** `report_refresh_state`) now carry an explicit
+`*_service_only` policy recording intent. Functionally unchanged (already deny-all for
+anon/authenticated). Advisor `rls_enabled_no_policy` 2 → 0.
 
-### 🔴 D-08 — Public storage buckets allow listing (incl. `qr-images`)
-4 × `public_bucket_allows_listing`. Restrict object listing; keep only the
-required public read on specific paths.
+### ✅ D-08 — public bucket listing removed (2026-07-23)
+Applied in `db/2026-07-23-security-pass-d14-d05-d08.sql`. Dropped the broad
+`Public read <bucket>` SELECT policies on `banners`, `product-images`, `qr-images`,
+`store-banners`. Public object URLs (`/object/public/...`) still serve normally —
+verified all QR/image columns use that form and the storefront makes no `.list()`
+call — so display is unaffected; only list-all-files is removed. Advisor
+`public_bucket_allows_listing` 4 → 0.
 
 ---
 
