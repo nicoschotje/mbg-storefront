@@ -1024,6 +1024,39 @@
   word-break: break-word;
 }
 
+/* ── ETA: HQ-provided delivery estimate on My Orders (additive line) ──────
+ * Soft delivery-blue highlight (mirrors the out_for_delivery badge hue) so it
+ * reads as progress info, distinct from the green store note and amber pay pill.
+ * Flex + min-width:0 lets a long message wrap cleanly on a narrow phone with no
+ * horizontal overflow. */
+.ord-eta {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  background: rgba(42, 90, 138, 0.10);
+  border: 1px solid rgba(42, 90, 138, 0.28);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.7rem;
+  margin: 0.1rem 0 0.55rem;
+}
+.ord-eta-icon { font-size: 1rem; line-height: 1.35; flex: 0 0 auto; }
+.ord-eta-main { min-width: 0; flex: 1 1 auto; }
+.ord-eta-text {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.4;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.ord-eta-updated {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.68rem;
+  color: var(--text-light);
+}
+
 /* ── LOGIN GATE ─────────────────────────────────────────── */
 .login-screen {
   position: fixed;
