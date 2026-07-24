@@ -23,6 +23,7 @@ const saved = await import('../js/modules/saved-address.js');
 const myOrders = await import('../js/modules/my-orders-store.js');
 const delivery = await import('../js/modules/delivery.js');
 const usdt = await import('../js/modules/crypto-pricing.js');
+const eta = await import('../js/modules/order-eta.js');
 
 // ── CHANGE 1: quantity cap = min(100, stock) ─────────────────────────────────
 console.log('CHANGE 1 — quantity cap (min(100, stock)):');
@@ -229,5 +230,49 @@ ok('checkout_rate ≤ 0 → { ok:false, reason:"invalid_rate" }');
 assert.equal(usdt.computeUsdtDue({ phpTotal: 3379, marketRate: null }).ok, false);
 assert.equal(usdt.computeUsdtDue({ phpTotal: 3379, marketRate: 0 }).ok, false);
 ok('missing / zero market rate → { ok:false }');
+
+// ── CHANGE 7: HQ ETA line on the customer Orders view (additive display) ─────
+console.log('CHANGE 7 — HQ ETA line (customer Orders display):');
+
+// Present, non-empty eta_message → renders the ETA row with the exact text.
+{
+  const html = eta.etaLineHtml({ eta_message: 'Preparing your order — estimated delivery today 5:00–6:30 PM' });
+  assert.ok(html.includes('ord-eta'), 'renders the ETA row container');
+  assert.ok(html.includes('Preparing your order — estimated delivery today 5:00–6:30 PM'),
+    'includes the HQ message verbatim');
+}
+ok('order with eta_message → ETA row shows the exact text');
+
+// Absent / null / empty / whitespace-only / non-object → renders NOTHING.
+assert.equal(eta.etaLineHtml({}), '');
+assert.equal(eta.etaLineHtml({ eta_message: null }), '');
+assert.equal(eta.etaLineHtml({ eta_message: '' }), '');
+assert.equal(eta.etaLineHtml({ eta_message: '   ' }), '');
+assert.equal(eta.etaLineHtml({ eta_message: 42 }), '');
+assert.equal(eta.etaLineHtml(null), '');
+assert.equal(eta.etaLineHtml(undefined), '');
+ok('missing / null / empty / whitespace eta_message → no ETA line (graceful)');
+
+// Untrusted HTML in the message is escaped — no raw tags reach innerHTML.
+{
+  const html = eta.etaLineHtml({ eta_message: 'Ready <b>now</b> & "soon" <script>x</script>' });
+  assert.ok(!html.includes('<b>'), 'raw <b> tag not injected');
+  assert.ok(!html.includes('<script>'), 'raw <script> tag not injected');
+  assert.ok(html.includes('&lt;b&gt;'), 'angle brackets escaped');
+  assert.ok(html.includes('&amp;'), 'ampersand escaped');
+  assert.ok(html.includes('&quot;'), 'double-quote escaped');
+}
+ok('HTML characters in eta_message are escaped (XSS-safe)');
+
+// eta_updated_at present → light "updated <relative>" hint; absent → omitted.
+{
+  const recent = new Date(Date.now() - 5000).toISOString();
+  const withTs = eta.etaLineHtml({ eta_message: 'On the way', eta_updated_at: recent });
+  assert.ok(withTs.includes('ord-eta-updated'), 'updated hint rendered when timestamp present');
+  assert.ok(withTs.includes('updated just now'), 'updated hint reuses timeAgo()');
+  const noTs = eta.etaLineHtml({ eta_message: 'On the way' });
+  assert.ok(!noTs.includes('ord-eta-updated'), 'no updated hint when timestamp absent');
+}
+ok('eta_updated_at → "updated <relative>" hint; absent → omitted');
 
 console.log(`\nAll ${pass} assertions passed.`);

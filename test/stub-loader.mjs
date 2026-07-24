@@ -3,13 +3,37 @@
 const STUBS = {
   supabase: `export function sb(){ return {}; }
              export function logActivity(){}`,
-  utils: `export const esc = s => String(s == null ? '' : s);
+  // esc/timeAgo mirror the REAL js/core/utils.js implementations so tests that
+  // exercise rendering (e.g. the ETA line) see genuine HTML-escaping / relative
+  // time rather than a pass-through stub.
+  utils: `export function esc(str){
+            if (str == null) return '';
+            return String(str)
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#039;');
+          }
           export const formatPrice = n => '₱' + (Number(n) || 0);
           export const openOverlay = () => {};
           export const closeOverlay = () => {};
           export const showToast = (m) => { (globalThis.__toasts ||= []).push(m); };
           export const normalisePhone = s => String(s||'');
-          export const isValidPHPhone = () => true;`,
+          export const isValidPHPhone = () => true;
+          export function timeAgo(iso){
+            if (!iso) return '';
+            const ms = Date.now() - new Date(iso).getTime();
+            const s = Math.floor(ms / 1000);
+            if (s < 60) return 'just now';
+            const m = Math.floor(s / 60);
+            if (m < 60) return m + 'm ago';
+            const h = Math.floor(m / 60);
+            if (h < 24) return h + 'h ago';
+            const d = Math.floor(h / 24);
+            if (d < 7)  return d + 'd ago';
+            return new Date(iso).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+          }`,
   config: `export const DEFAULT_FREE_DELIVERY_THRESHOLD = 5000;`,
   banners: `export function getStoreSettings(){ return globalThis.__storeSettings || {}; }`,
   auth: `export function getSession(){ return globalThis.__session || null; }

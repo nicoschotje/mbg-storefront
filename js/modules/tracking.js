@@ -16,6 +16,7 @@ import { sb } from '../core/supabase.js';
 import { esc, formatPrice, openOverlay, closeOverlay, parseItems, timeAgo, showToast } from '../core/utils.js';
 import { getSession, tryRestoreSession } from '../core/auth.js?v=20260520-polish';
 import { getMyOrderIds } from './my-orders-store.js?v=20260626-phase1';
+import { etaLineHtml } from './order-eta.js?v=20260724-eta';
 import { getProducts } from './products.js?v=20260608-deepfix';
 import { addToCart, clearCart } from './cart.js?v=20260608-deepfix';
 
@@ -183,11 +184,16 @@ function renderOrders(list, orders) {
       : (o.payment_status === 'paid')
         ? `<span class="pay-pill paid">✓ Payment confirmed</span>`
         : `<span class="pay-pill pending">⏳ Payment under review</span>`;
+    // HQ-provided delivery ETA / status message (additive, escaped inside the
+    // helper). Suppressed for cancelled orders — same rule the payment pill
+    // uses — so a stale "estimated delivery" never contradicts a cancellation.
+    const etaHtml = status === 'cancelled' ? '' : etaLineHtml(o);
     return `<article class="ord-card status-${esc(status)}">
       <header>
         <span class="ord-num">#${esc(o.order_number || (o.id || '').slice(0,8))}</span>
         <span class="ord-badge">${esc(STATUS_LABELS[status] || status)}</span>
       </header>
+      ${etaHtml}
       ${payPill}
       ${noteHtml}
       <div class="ord-summary">${esc(summary)}</div>
