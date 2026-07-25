@@ -1,17 +1,24 @@
-// place-order — MBG Tier 2 Phase 1 (Milestone 1)
+// place-order — MBG Tier 2 (delivery-quote binding)
 //
-// Changes vs the previous version:
-//  * Account ownership: the storefront passes its CUSTOM session token
-//    (`session_token`). We resolve the owning account SERVER-SIDE via the
-//    validate_customer_session RPC and stamp it as orders.order_owner_id.
-//    The browser never supplies an owner id. customer_name/customer_phone are
-//    recipient/contact only.
-//  * Server-side total authority: subtotal is recomputed from items × current
-//    DB prices (variant price_override ?? product price); the delivery fee is
-//    recomputed from the zone / distance using authoritative store_settings;
-//    the discount is recomputed (as before) against the server subtotal; and
-//    the order total is derived from those server figures. Browser-supplied
-//    subtotal/delivery_fee/total are no longer trusted.
+// Delivery-quote consistency fix (MG-563):
+//  * The storefront shows the fee from the quote_delivery RPC and sends that
+//    quote's `quote_id`. This function now FORWARDS `quote_id` (and
+//    `delivery_zone_id`) to place_customer_order, whose B6a quote fork
+//    atomically claims the quote and binds the saved fee to the QUOTED fee —
+//    so the price shown at checkout and the price saved on the order can no
+//    longer diverge. Previously quote_id was dropped here and the fee was
+//    recomputed with a second engine (serverCalcDeliveryFee), which produced a
+//    different number (the ₱282-shown-vs-₱384-saved defect).
+//  * On the quote path the quoted fee is the ONLY authority; the server no
+//    longer recomputes delivery. The legacy recompute survives ONLY for old
+//    cached bundles that send no quote_id (back-compat) and is removed once
+//    strict enforcement is enabled after the cache/SW-version bump.
+//  * A quote rejection (RPC P0004) is surfaced as HTTP 409 {error:'quote_invalid'}
+//    so the storefront's refresh-and-reconfirm flow fires (never a silent charge).
+//
+// Unchanged: account ownership resolved server-side from `session_token`; the
+// subtotal and discount are recomputed server-side (browser subtotal/total are
+// still not trusted); USDT snapshot; Telegram owner alert.
 //
 // Still verify_jwt=false + service-role key (custom session auth, not Supabase JWT).
 
@@ -199,7 +206,7 @@ serve(async (req) => {
       customer_name, customer_phone, delivery_address, delivery_zone, delivery_zone_id,
       promo_code, payment_method, receipt_url, notes, items,
       telegram_user_id, telegram_chat_id, delivery_lat, delivery_lng,
-      session_token,
+      session_token, quote_id,
     } = body
 
     if (!customer_name || !items?.length) {
@@ -224,15 +231,50 @@ serve(async (req) => {
       .select('store_lat, store_lng, delivery_rate_multiplier, delivery_fee, free_delivery_min, free_delivery_enabled, telegram_bot_token, telegram_chat_id, crypto_enabled, crypto_usdt_address, crypto_usdt_network')
       .limit(1).single()
 
-    const serverFee = await serverCalcDeliveryFee(SB, ss, {
-      zoneId: delivery_zone_id || null,
-      lat: delivery_lat != null ? Number(delivery_lat) : null,
-      lng: delivery_lng != null ? Number(delivery_lng) : null,
-      subtotal: serverSubtotal,
-    })
+    // ── Delivery-fee authority: canonical quote path vs legacy recompute ──────
+    // Canonical: a valid quote_id. The customer already saw this quote's fee
+    // (quote_delivery is the single display source); it is the ONLY authority.
+    // We read fee_centavos ONLY to build the order total — place_customer_order
+    // independently re-reads, atomically CLAIMS, validates (subtotal / mode /
+    // destination / operator) and BINDS the same delivery_quotes row, ignoring
+    // any browser-supplied fee, so the saved fee equals the displayed fee by
+    // construction. A non-existent / expired / consumed / subtotal-, mode-,
+    // dest- or zone-mismatched quote raises P0004 → 409 quote_invalid below.
+    //
+    // Presence rules: the legacy server recompute is allowed ONLY when quote_id
+    // is COMPLETELY ABSENT (undefined / null) — an old cached bundle from before
+    // the quote switch (removed at the strict-enforcement rollout step). A PRESENT
+    // quote_id must be a well-formed uuid; anything malformed is REJECTED with 409
+    // quote_invalid and never silently recomputed with a second engine.
+    const quoteProvided = quote_id !== undefined && quote_id !== null
+    const quoteId = quoteProvided ? String(quote_id).trim() : ''
+    const wellFormedQuote = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(quoteId)
+
+    if (quoteProvided && !wellFormedQuote) {
+      // A quote_id was supplied but is not a valid id — do NOT fall back to a
+      // second delivery calculation; force the client to re-quote.
+      return new Response(JSON.stringify({ error: 'quote_invalid', reason: 'malformed_quote_id' }), {
+        status: 409, headers: { ...cors, 'Content-Type': 'application/json' }
+      })
+    }
+    const hasQuote = quoteProvided && wellFormedQuote
+
+    let effectiveFee: number
+    if (hasQuote) {
+      const { data: q } = await SB.from('delivery_quotes')
+        .select('fee_centavos').eq('id', quoteId).maybeSingle()
+      effectiveFee = q ? (Number(q.fee_centavos) || 0) / 100 : 0
+    } else {
+      effectiveFee = await serverCalcDeliveryFee(SB, ss, {
+        zoneId: delivery_zone_id || null,
+        lat: delivery_lat != null ? Number(delivery_lat) : null,
+        lng: delivery_lng != null ? Number(delivery_lng) : null,
+        subtotal: serverSubtotal,
+      })
+    }
 
     const serverDiscount = await serverCalcDiscount(SB, promo_code, pricedItems, serverSubtotal)
-    const finalTotal = Math.max(0, round2(serverSubtotal + serverFee - serverDiscount.amount))
+    const finalTotal = Math.max(0, round2(serverSubtotal + effectiveFee - serverDiscount.amount))
 
     // ── USDT: price the order server-side and build the authoritative snapshot.
     //    Done BEFORE the order row is created so a USDT order we cannot price is
@@ -268,7 +310,7 @@ serve(async (req) => {
         payment_method: 'usdt',
         network: ss?.crypto_usdt_network || null,
         subtotal: serverSubtotal,
-        delivery_fee: serverFee,
+        delivery_fee: effectiveFee,
         discount: serverDiscount.amount,
         final_php_total: finalTotal,
         market_rate: marketRate,
@@ -288,7 +330,10 @@ serve(async (req) => {
       customer_phone: customer_phone || null,
       delivery_address: delivery_address || null,
       delivery_zone: delivery_zone || null,
-      delivery_fee: String(serverFee),
+      delivery_zone_id: delivery_zone_id || null,   // forwarded so the RPC can bind a zone-mode quote
+      // Quote path: display / back-compat only — place_customer_order binds the
+      // fee from the claimed quote and ignores this. Legacy path: authoritative.
+      delivery_fee: String(effectiveFee),
       subtotal: String(serverSubtotal),
       total: String(finalTotal),
       discount_amount: String(serverDiscount.amount),
@@ -302,6 +347,8 @@ serve(async (req) => {
       telegram_chat_id: telegram_chat_id ? String(telegram_chat_id) : null,
       delivery_lat: delivery_lat != null ? String(delivery_lat) : null,
       delivery_lng: delivery_lng != null ? String(delivery_lng) : null,
+      // Enables the RPC's quote-consumption fork. null/blank → legacy branch.
+      quote_id: hasQuote ? quoteId : null,
     }
 
     const { data: rpcResult, error: rpcErr } = await SB.rpc('place_customer_order', { payload })
@@ -309,6 +356,17 @@ serve(async (req) => {
     if (rpcErr) {
       const code = (rpcErr as any).code || ''
       const msg = rpcErr.message || 'Order failed'
+      // P0004 = quote_invalid (missing / expired / consumed / subtotal-, mode-,
+      // dest- or operator-mismatch). The storefront's 409 handler keys on the
+      // EXACT string 'quote_invalid' to clear the quote, re-quote once, and ask
+      // the customer to confirm the refreshed fee — so return that literally,
+      // with the specific reason alongside for logs/telemetry. No order exists.
+      if (code === 'P0004') {
+        console.error('place-order quote rejected:', msg)
+        return new Response(JSON.stringify({ error: 'quote_invalid', reason: msg, code }), {
+          status: 409, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
       let status = 500
       if (code === 'P0001') status = 400
       else if (code === 'P0002' || code === 'P0003') status = 409
