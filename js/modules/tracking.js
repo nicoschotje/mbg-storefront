@@ -177,6 +177,18 @@ function renderOrders(list, orders) {
         <div class="ord-note-label">📦 Message from the store:</div>
         <div class="ord-note-body">${esc(note)}</div>
       </div>` : '';
+    // Store-set ETA (get_my_orders returns it only for THIS customer's / this
+    // device's orders — ownership is enforced server-side by the RPC). Absent
+    // on most orders and on live production until the ETA columns ship: any
+    // falsy value renders nothing. Live orders only — a completed or
+    // cancelled order has no arrival to estimate. Reuses .ord-note styling
+    // so the block is mobile-friendly with zero new CSS.
+    const eta = (status === 'completed' || status === 'cancelled') ? '' : (o.eta_message || '').trim();
+    const etaHtml = eta ? `<div class="ord-note ord-eta">
+        <div class="ord-note-label">🕒 Estimated arrival:</div>
+        <div class="ord-note-body">${esc(eta)}</div>
+        ${o.eta_updated_at ? `<div class="ord-updated">Updated ${esc(timeAgo(o.eta_updated_at))}</div>` : ''}
+      </div>` : '';
     // Payment journey pill (Phase 2 M3): received → under review → confirmed.
     // payment_status is 'paid' once verify-payment confirms the receipt.
     const payPill = status === 'cancelled' ? ''
@@ -189,6 +201,7 @@ function renderOrders(list, orders) {
         <span class="ord-badge">${esc(STATUS_LABELS[status] || status)}</span>
       </header>
       ${payPill}
+      ${etaHtml}
       ${noteHtml}
       <div class="ord-summary">${esc(summary)}</div>
       <footer>
