@@ -261,9 +261,37 @@ serve(async (req) => {
 
     let effectiveFee: number
     if (hasQuote) {
-      const { data: q } = await SB.from('delivery_quotes')
+      // The fee that feeds finalTotal and the USDT snapshot comes from the
+      // quote row and ONLY the quote row. Three outcomes, none of which may
+      // collapse into a silent ₱0: a failed read is a retryable 503 (the DB
+      // said nothing — do not guess a fee, do not touch the RPC), a missing
+      // row is a 409 re-quote signal, and a present row must carry a finite,
+      // non-negative fee_centavos — 0 itself is legitimate (free delivery).
+      // place_customer_order re-reads and binds this same row inside its own
+      // transaction, so the fee used for payment math here and the fee saved
+      // there can only agree — or the order is rejected. Never diverge.
+      const { data: q, error: qErr } = await SB.from('delivery_quotes')
         .select('fee_centavos').eq('id', quoteId).maybeSingle()
-      effectiveFee = q ? (Number(q.fee_centavos) || 0) / 100 : 0
+      if (qErr) {
+        // Sanitised technical log only — no customer data, no payload echo.
+        console.error('place-order quote lookup failed:', (qErr as any).code || '', qErr.message || 'unknown')
+        return new Response(JSON.stringify({ error: 'quote_lookup_failed' }), {
+          status: 503, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
+      if (!q) {
+        return new Response(JSON.stringify({ error: 'quote_invalid', reason: 'missing' }), {
+          status: 409, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
+      const feeCentavos = Number(q.fee_centavos)
+      if (!Number.isFinite(feeCentavos) || feeCentavos < 0) {
+        console.error('place-order quote fee invalid:', String(q.fee_centavos))
+        return new Response(JSON.stringify({ error: 'quote_invalid', reason: 'fee_invalid' }), {
+          status: 409, headers: { ...cors, 'Content-Type': 'application/json' }
+        })
+      }
+      effectiveFee = feeCentavos / 100
     } else {
       effectiveFee = await serverCalcDeliveryFee(SB, ss, {
         zoneId: delivery_zone_id || null,
