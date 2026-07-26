@@ -746,9 +746,16 @@
   .checkout-cta-bar {
     position: sticky;
     bottom: 0;
+    /* Deliberately small: only has to beat in-checkout content (the map is
+       isolated at z 0, the sticky header sits at 5). Stays far below the
+       cart drawer (90), checkout/tracking screens (95) and modals (100+),
+       so no overlay layering changes. */
     z-index: 6;
     padding: 1rem 1rem calc(1rem + var(--safe-bottom));
-    background: linear-gradient(to top, var(--bg) 74%, transparent);
+    /* Solid, fully opaque bar — the old fade-to-transparent band let the
+       map tiles show "through" the CTA area while the map scrolled under. */
+    background: var(--bg);
+    border-top: 1px solid var(--border-light);
   }
 }
 .place-order-btn {
@@ -1524,6 +1531,14 @@ body.modal-open .appFooter {
   border-radius: var(--radius-sm);
   /* CRITICAL: lets the marker be dragged on iOS instead of scrolling. */
   touch-action: none;
+  /* Contain Leaflet's internal z-index ladder (tiles 200 … controls 1000)
+     inside the map box. Without its own stacking context those panes
+     resolve against the checkout screen and paint OVER the sticky
+     Place Order bar (z-index 6) while scrolling. isolation + z-index: 0
+     seals them in; the map itself then stacks as an ordinary box. */
+  position: relative;
+  isolation: isolate;
+  z-index: 0;
 }
 @media (max-width: 480px) {
   .address-map { height: 200px; }
