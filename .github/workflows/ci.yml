@@ -29,3 +29,8 @@ jobs:
 
       - name: Run unit tests
         run: node --import ./test/register.mjs ./test/run-tests.mjs
+
+      # Mobile-journey drive (stub Supabase client — zero network/DB calls)
+      # at 320px, 390px and desktop. Mirrors mbg-dashboard's headless suite.
+      - name: Headless mobile-journey drive
+        run: bash test/headless/run.sh

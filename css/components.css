@@ -246,7 +246,7 @@
 .modal-close {
   position: absolute;
   top: 0.85rem; right: 1rem;
-  width: 32px; height: 32px;
+  width: 40px; height: 40px;
   border-radius: 50%;
   border: none;
   background: rgba(14,28,16,0.08);
@@ -386,7 +386,7 @@
   font-size: 1.3rem;
 }
 .cart-close {
-  width: 36px; height: 36px;
+  width: 40px; height: 40px;
   border-radius: 50%;
   border: none;
   background: rgba(14,28,16,0.08);
@@ -428,7 +428,8 @@
   padding: 0.3rem 0.55rem;
 }
 .cart-qty .qb {
-  width: 28px; height: 28px;
+  /* 36px (was 28px) — the +/− steppers are a core mobile control */
+  width: 36px; height: 36px;
   border: none; background: var(--white);
   border-radius: 50%;
   font-size: 1rem;
@@ -577,7 +578,7 @@
   color: var(--text-muted);
   margin-bottom: 0.32rem;
 }
-.field input, .field textarea {
+.field input, .field textarea, .field select {
   width: 100%;
   font-size: 16px; /* iOS auto-zoom guard */
   border: 1.5px solid var(--border);
@@ -588,8 +589,24 @@
   min-height: 52px;
   font-family: var(--font-body);
 }
+/* A native <select> never shrinks below its longest option, so the delivery
+   zone selector forced the checkout screen into horizontal scroll on phones.
+   width:100% above + max-width + ellipsis keeps it inside the viewport. */
+.field select {
+  max-width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 2.2rem;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23524B3E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.8rem center;
+  background-size: 16px 16px;
+}
 .field textarea { resize: vertical; min-height: 84px; }
-.field input:focus, .field textarea:focus {
+.field input:focus, .field textarea:focus, .field select:focus {
   outline: none;
   border-color: var(--green-mid);
   box-shadow: 0 0 0 3px rgba(55,92,59,0.15);
@@ -959,8 +976,9 @@
 .copy-mini {
   background: transparent; color: var(--green-dark);
   border: 1px solid var(--border-light); border-radius: 50px;
-  padding: 0.15rem 0.6rem; font-size: 0.72rem; font-weight: 700; cursor: pointer;
+  padding: 0.3rem 0.7rem; font-size: 0.72rem; font-weight: 700; cursor: pointer;
   margin-left: auto;
+  min-height: 34px;
 }
 .copy-btn.copied, .copy-mini.copied { background: var(--success); color: var(--white); border-color: var(--success); }
 .pay-row { display: flex; align-items: center; gap: 0.5rem; }
@@ -1352,6 +1370,7 @@ body.modal-open .appFooter {
 }
 .search-input {
   flex: 1;
+  height: 44px;
   background: transparent;
   border: none;
   outline: none;
@@ -1696,7 +1715,7 @@ body.modal-open .appFooter {
 .acct-item-danger { color: var(--danger); }
 
 /* Footer links must stay legible on the dark animated background */
-.footer a { color: var(--green-leaf); font-weight: 600; }
+.footer a { color: var(--green-leaf); font-weight: 600; display: inline-block; padding: 0.6rem 0.4rem; }
 
 /* QR lightbox — tap a payment QR to expand it for scanning */
 #qr-lightbox {
@@ -1987,7 +2006,7 @@ body.modal-open .appFooter {
   padding: 0.3rem 0.6rem;
 }
 .strain-qty-btn {
-  width: 32px; height: 32px;
+  width: 36px; height: 36px;
   border-radius: 50%;
   border: none;
   background: var(--white);

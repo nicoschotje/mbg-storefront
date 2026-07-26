@@ -141,6 +141,21 @@ body.lock-scroll { overflow: hidden; }
 }
 .header-right { display: flex; align-items: center; gap: 0.5rem; }
 
+/* ≤400px: the tier pill + user badge can't fit beside the logo — the pair
+   pushed the whole page into horizontal scroll on 320–360px phones. The
+   logo keeps its width; the badge truncates; the tier pill (which mostly
+   duplicates the customer's name) collapses at this size only. */
+@media (max-width: 400px) {
+  .header-inner { gap: 0.5rem; }
+  #tierBadge { display: none !important; }
+  /* Shrink chain: header-right → user-menu → badge → label, so the name
+     ellipsizes to exactly the space the logo leaves over. */
+  .header-right, .user-menu { min-width: 0; }
+  .user-menu { display: flex; }
+  .user-badge { max-width: 100%; min-width: 0; }
+  .user-badge .user-badge-label { max-width: none; min-width: 0; flex: 1 1 auto; }
+}
+
 .cart-btn {
   position: relative;
   display: flex; align-items: center; gap: 0.45rem;
