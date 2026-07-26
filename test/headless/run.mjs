@@ -155,6 +155,70 @@ for (const vp of VIEWPORTS) {
   });
   t(`address map renders (${mapBox?.w}×${mapBox?.h}) @${vw}`, !!mapBox && mapBox.h >= 180 && mapBox.w > 200);
 
+  // ── Map ↔ sticky CTA stacking (production hotfix regression) ──────
+  // The stub reproduces Leaflet's REAL pane/control z-indexes (tiles 200,
+  // markers 600, corner controls 1000). First pin the harness itself: if
+  // the stub ever degrades to a blank placeholder this assertion fails
+  // before the stacking checks can silently pass.
+  const paneZ = await page.evaluate(() =>
+    getComputedStyle(document.querySelector('#addr-map .leaflet-marker-pane')).zIndex);
+  t(`leaflet stub carries real pane z-indexes (marker=600) @${vw}`, paneZ === '600', `z=${paneZ}`);
+
+  if (mobile) {
+    const stack = await page.evaluate(() => new Promise((res) => {
+      const screen = document.querySelector('#checkoutScreen');
+      const map = document.querySelector('#addr-map');
+      const bar = document.querySelector('.checkout-cta-bar');
+      const btn = document.querySelector('#placeOrderBtn');
+      const barH = bar.getBoundingClientRect().height;
+      const m0 = map.getBoundingClientRect();
+      // Scroll so the map's lower edge sits under the sticky bar.
+      screen.scrollTop = Math.max(0, screen.scrollTop + (m0.bottom - window.innerHeight) + barH * 0.6);
+      setTimeout(() => {
+        const mapR = map.getBoundingClientRect();
+        const btnR = btn.getBoundingClientRect();
+        const intersects = mapR.bottom > btnR.top && mapR.top < btnR.bottom;
+        let ctaWins = true;
+        for (const fx of [0.15, 0.5, 0.85]) {
+          const x = btnR.left + btnR.width * fx;
+          const y = Math.max(btnR.top + 4, mapR.top + 4);
+          if (y <= Math.min(btnR.bottom, mapR.bottom)) {
+            const el = document.elementFromPoint(x, y);
+            if (!el || (!el.closest('.checkout-cta-bar') && !el.closest('#placeOrderBtn'))) ctaWins = false;
+          }
+        }
+        const cs = getComputedStyle(bar);
+        // Content must be fully scrollable clear of the bar at max scroll.
+        screen.scrollTop = screen.scrollHeight;
+        const sections = document.querySelectorAll('#checkoutScreen .check-section');
+        const last = sections[sections.length - 1].getBoundingClientRect();
+        const barR = bar.getBoundingClientRect();
+        res({
+          intersects, ctaWins,
+          barOpaque: cs.backgroundImage === 'none' && !/rgba\(.*,\s*0/.test(cs.backgroundColor),
+          lastClear: last.bottom <= barR.top + 1,
+          mapIsolated: getComputedStyle(document.querySelector('#addr-map')).isolation === 'isolate',
+        });
+      }, 350);
+    }));
+    t(`map scrolled under CTA: bar paints and hit-tests above Leaflet panes @${vw}`,
+      stack.intersects && stack.ctaWins, JSON.stringify(stack));
+    t(`CTA bar fully opaque + map stacking-isolated @${vw}`,
+      stack.barOpaque && stack.mapIsolated, JSON.stringify(stack));
+    t(`checkout content scrolls fully clear of the sticky bar @${vw}`,
+      stack.lastClear, JSON.stringify(stack));
+    // Pin interaction still live after the isolation change.
+    const pinOk = await page.evaluate(() => new Promise((res) => {
+      document.querySelector('#addr-map').scrollIntoView({ block: 'center' });
+      let moved = 0;
+      document.addEventListener('mbg:mapPinMoved', () => { moved++; });
+      window.__LSTUB.map.fireClick(14.61, 121.01);
+      window.__LSTUB.marker.fireDragEnd(14.62, 121.02);
+      setTimeout(() => res(moved), 200);
+    }));
+    t(`map tap + pin drag still dispatch pin events @${vw}`, pinOk >= 2, `${pinOk} events`);
+  }
+
   // 7. Receipt + place order
   await page.setInputFiles('#receiptFile', { name: 'r.png', mimeType: 'image/png', buffer: PNG_1x1 });
   await page.waitForTimeout(200);
